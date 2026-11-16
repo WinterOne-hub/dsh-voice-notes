@@ -1,0 +1,37 @@
+name: Official Windows Desktop Host smoke test
+on:
+  push:
+    branches: [codex/windows-host-smoke]
+permissions:
+  contents: read
+jobs:
+  host:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: '24'
+          architecture: x64
+      - name: Install signed DeepSeek Harness
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'dsh-windows-x64.exe'
+          $desktop = Join-Path $env:RUNNER_TEMP 'voice-notes-harness'
+          curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 150 --retry 2 'https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe' -o $installer
+          if ($LASTEXITCODE -ne 0) { throw 'Official installer download failed' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ($signature.Status -ne 'Valid') { throw "Official installer signature: $($signature.Status)" }
+          $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$desktop") -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Official installer exited $($install.ExitCode)" }
+          if (!(Test-Path -LiteralPath (Join-Path $desktop 'DeepSeek Harness.exe'))) { throw 'Installed desktop executable missing' }
+          echo "VOICE_NOTES_TEST_DESKTOP=$desktop" >> $env:GITHUB_ENV
+      - name: Pack and exercise plugin through the real Host
+        shell: pwsh
+        run: |
+          npm pack --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
+          node scripts/windows-host-smoke.mjs
