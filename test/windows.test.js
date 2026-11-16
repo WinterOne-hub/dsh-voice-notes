@@ -17,9 +17,10 @@ test('Windows archives inherit a private ACL and refuse pre-existing grants to E
   const powershell = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const script = String.raw`
 $ErrorActionPreference = 'Stop'
-$root = Get-Acl -LiteralPath $env:VOICE_NOTES_TEST_ROOT
+$root = ([System.IO.DirectoryInfo]::new($env:VOICE_NOTES_TEST_ROOT)).GetAccessControl()
 if (!$root.AreAccessRulesProtected) { throw 'The archive must not inherit parent access rules' }
-$file = Get-Acl -LiteralPath $env:VOICE_NOTES_TEST_FILE
+$recording = [System.IO.FileInfo]::new($env:VOICE_NOTES_TEST_FILE)
+$file = $recording.GetAccessControl()
 $sidType = [System.Security.Principal.SecurityIdentifier]
 $user = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
 $approved = @($user, 'S-1-5-18')
@@ -30,7 +31,7 @@ if ($rights.Count -ne 2 -or @($rights | Where-Object { $_.IdentityReference.Valu
 $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
 $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($everyone, 'Read', 'Allow')
 $file.AddAccessRule($rule)
-Set-Acl -LiteralPath $env:VOICE_NOTES_TEST_FILE -AclObject $file
+$recording.SetAccessControl($file)
 `;
   execFileSync(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], {
     env: { ...process.env, VOICE_NOTES_TEST_ROOT: root, VOICE_NOTES_TEST_FILE: audio },

@@ -186,9 +186,9 @@ test('failed segment can be retried and concurrent derived updates preserve the 
 
 async function bootClient(t, call, preferences = {}) {
   const rawSource = await readFile(new URL('../client.js', import.meta.url), 'utf8');
-  const source = rawSource.replace(/^    return \{\n      inject: \['slots',/m, (registration) =>
+  const source = rawSource.replace(/^    return \{\r?\n      inject: \['slots',/m, (registration) =>
     '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection };\n' + registration);
-  assert.notEqual(source, rawSource, 'The test harness must expose the client factory helpers');
+  assert.ok(source !== rawSource, 'The test harness must expose the client factory helpers');
   const methods = { connect() {}, disconnect() {} };
   const stream = { getTracks: () => [] };
   class AudioContext {
