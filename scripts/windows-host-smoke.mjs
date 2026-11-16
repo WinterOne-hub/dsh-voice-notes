@@ -68,6 +68,34 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
   assert.equal((await update.json()).current, '0.0.2');
   assert.equal((await send('/recordings/' + id, { method: 'DELETE' })).status, 200);
   console.log('Installed in official Windows Desktop Host; verified signed session, SenseVoice registration, recording archive, Range playback and updater endpoint.');
+  const providerId = 'sensevoice-local';
+  const post = (path, json) => send(path, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(json),
+  });
+  const setup = await post('/prepare', { providerId });
+  assert.equal(setup.status, 202);
+  console.log('Preparing the official native SenseVoice model on Windows.');
+  const deadline = Date.now() + 240_000;
+  let modelReady = false;
+  for (;;) {
+    const snapshot = await (await send('/status')).json();
+    const state = snapshot.providers.find((p) => p.id === providerId).preparation;
+    assert.notEqual(state.phase, 'failed', state.error ?? 'SenseVoice preparation failed');
+    if (state.phase === 'ready' || state.phase === 'standby') { modelReady = true; break; }
+    if (Date.now() >= deadline) break;
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  assert.ok(modelReady, 'SenseVoice preparation did not finish before the test deadline');
+  const wave = await readFile(process.env.VOICE_NOTES_TEST_WAV);
+  const started = performance.now();
+  const recognition = await post('/transcribe', { audioBase64: wave.toString('base64'), language: 'en' });
+  const recognized = await recognition.json();
+  assert.equal(recognition.status, 200, recognized.error?.message);
+  assert.match(recognized.text.toLowerCase(), /blue/);
+  assert.match(recognized.text.toLowerCase(), /folder/);
+  console.log('Windows SenseVoice recognized locally synthesized speech through the plugin in ' + Math.round(performance.now()-started) + ' ms.');
+
 } catch (error) {
   console.error(output.split('\n').filter(line => /warn|error|voice-live/i.test(line)).slice(-16).join('\n').replace(/https?:\/\/\S+/g, '[url]'));
   throw error;
