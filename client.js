@@ -1,0 +1,3845 @@
+/**
+ * Client half of the live voice input bundle.
+ *
+ * A microphone control sits between the model selector and Send. While it
+ * records, the plugin sends interim PCM for captions and checkpoints bounded
+ * segments for recovery. Compressed audio is archived independently. Opt-in
+ * text processing uses the disclosed model through the Host.
+ */
+
+window.__ModuleLoader__.load({
+  id: 'dsh-voice-notes',
+  factory(require) {
+    const React = require('react');
+    const h = React.createElement;
+
+    const NS = 'voice-live';
+    const BUILD = '0.0.1';
+    const SOURCE_LANGUAGES = [
+      ['auto', 'translate.auto'],
+      ['zh', '简体中文'],
+      ['en', 'English'],
+      ['yue', '粤语'],
+      ['ja', '日本語'],
+      ['ko', '한국어'],
+    ];
+    const TARGETS = [
+      ['off', 'translate.off'],
+      ['en', 'English'],
+      ['zh', '简体中文'],
+      ['yue', '粤语'],
+      ['ja', '日本語'],
+      ['ko', '한국어'],
+      ['fr', 'Français'],
+      ['de', 'Deutsch'],
+      ['es', 'Español'],
+      ['ru', 'Русский'],
+    ];
+    const SHORTCUTS = [
+      ['off', 'shortcut.off'],
+      ['KeyY', 'Ctrl+Shift+Y'],
+      ['KeyL', 'Ctrl+Shift+L'],
+      ['KeyK', 'Ctrl+Shift+K'],
+    ];
+    const API = '/api/voice-live';
+    const SAMPLE_RATE = 16_000;
+    /** Start a new recognition slice after this much continuous speech. */
+    const SEGMENT_SECONDS = 28;
+    /** Silence that closes a segment. */
+    const SILENCE_MS = 1400;
+    /** RMS above this counts as speech. */
+    const VOICE_RMS = 0.008;
+    /** Minimum slice worth sending. */
+    const MIN_SECONDS = 0.45;
+    /** Cadence of interim recognition while the current slice grows. */
+    const PARTIAL_MS = 1_300;
+    const CHECKPOINT_MS = 5000;
+
+    /** AudioWorklet source: batch 128-frame renders into ~4096-sample messages. */
+    const WORKLET_SOURCE = `
+class VoiceLiveCapture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.parts = [];
+    this.count = 0;
+    this.port.onmessage = () => {
+      this.flush();
+      this.port.postMessage({ flushed: true });
+    };
+  }
+  flush() {
+    if (!this.count) return;
+    const out = new Float32Array(this.count);
+    let at = 0;
+    for (const part of this.parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    this.parts = [];
+    this.count = 0;
+    this.port.postMessage(out, [out.buffer]);
+  }
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (!channel) return true;
+    this.parts.push(new Float32Array(channel));
+    this.count += channel.length;
+    if (this.count >= 4096) this.flush();
+    return true;
+  }
+}
+registerProcessor('voice-live-capture', VoiceLiveCapture);
+`;
+
+    const ZH = {
+      dictate: '语音输入（边录边写）',
+      'phase.requesting': '正在请求麦克风…',
+      'phase.recording': '正在聆听',
+      'phase.finishing': '正在整理文字…',
+      'phase.ready': '语音模型已就绪',
+      'bar.stop': '停止并保留文字',
+      'bar.cancel': '取消录音',
+      'bar.translate': '同步翻译',
+      'bar.translateOn': '已开启翻译，停顿后自动翻译',
+      'translate.off': '不翻译',
+      'translate.title': '翻译为',
+      'translate.enable': '翻译',
+      'translate.auto': '自动',
+      'language.title': '识别语言',
+      'language.hint': '仅用于本机语音识别。可以单独开启模型整理。',
+      'bar.elapsed': '{time}',
+      'bar.retry': '重新录音',
+      'bar.close': '关闭',
+      'live.empty': '开口说话，文字会实时出现在这里…',
+      'live.hint': '停顿会自动分段；切到后台也会继续录音，停止后文字会插入下方草稿。',
+      'live.translating': '翻译中…',
+      'live.translation': '译文',
+      'setup.title': '启用本地语音识别',
+      'setup.body':
+        'SenseVoiceSmall 在本机运行，音频不会离开这台电脑。首次使用需要下载模型（约 {size}）。',
+      'setup.download': '下载并准备',
+      'setup.later': '稍后',
+      'setup.cancel': '取消下载',
+      'setup.preparing': '正在准备模型…',
+      'setup.ready': '模型已就绪，可以开始录音。',
+      'setup.start': '开始录音',
+      'setup.failed': '模型准备失败：{message}',
+      'setup.retry': '重试',
+      'setup.source': '下载源',
+      'setup.sourceAuto': '自动选择',
+      'setup.disk': '预计占用磁盘 {size}',
+      'setup.step.check': '检查缓存',
+      'setup.step.model': '下载识别模型',
+      'setup.step.vad': '下载静音检测',
+      'setup.step.verify': '校验文件',
+      'setup.step.load': '加载模型',
+      'setup.unavailable': '语音服务未连接，请确认语音插件已启用。',
+      'result.title': '转写完成',
+      'result.empty': '没有识别到语音',
+      'result.insert': '插入草稿',
+      'result.insertTranslation': '插入译文',
+      'result.insertBoth': '插入双语',
+      'result.copy': '复制',
+      'result.discard': '关闭',
+      'result.copied': '已复制',
+      'error.title': '语音输入失败',
+      'error.retry': '重试',
+      'error.close': '关闭',
+      'error.blocked': '麦克风权限被拒绝，请在系统设置中允许 DeepSeek Harness 使用麦克风。',
+      'error.unavailable': '当前环境无法录音，请确认浏览器或桌面端支持麦克风。',
+      'error.nodevice': '没有找到可用的麦克风。',
+      'error.empty': '没有录到声音。',
+      'error.tooLong': '录音太长，已自动停止。',
+      'studio.title': '语音速记',
+      'studio.subtitle': '本机识别 · 录音自动保存到历史',
+      'studio.record': '开始录音',
+      'studio.stop': '停止并保存',
+      'studio.cancel': '取消',
+      'studio.again': '重新录音',
+      'studio.close': '关闭',
+      'studio.saved': '已保存到录音历史',
+      'studio.saveFailed': '录音保存失败：{message}',
+      'studio.history': '录音历史',
+      'studio.count': '{n} 条',
+      'studio.refresh': '刷新',
+      'studio.path': '保存在',
+      'studio.copyPath': '复制路径',
+      'studio.loading': '正在读取录音…',
+      'studio.empty': '还没有录音，点上面的麦克风开始。',
+      'studio.noAudio': '无音频',
+      'studio.noText': '（无转写）',
+      'studio.copy': '复制文字',
+      'studio.copied': '已复制',
+      'studio.download': '下载音频',
+      'studio.delete': '删除',
+      'studio.confirmDelete': '删除这条录音和音频？',
+      'studio.expand': '展开',
+      'studio.collapse': '收起',
+      'studio.retry': '重试',
+      'studio.model': '语音模型',
+      'studio.ready': '已就绪',
+      'studio.preparing': '准备中',
+      'studio.unprepared': '需要下载',
+      'studio.historyEmpty': '历史为空',
+      'studio.report': '会议报告',
+      'studio.reportHint': '停录后由默认模型生成',
+      'studio.generating': '正在生成会议报告…',
+      'studio.generate': '生成会议报告',
+      'studio.copyReport': '复制报告',
+      'studio.reportFailed': '会议报告生成失败：{message}',
+      'studio.hint': '录音过程中自动保存。停录后可在这里查看转写，或到历史里回听。',
+      'history.search': '搜索标题、转写或报告',
+      'history.noMatch': '没有匹配的录音。',
+      'history.more': '下一页',
+      'history.previous': '上一页',
+      'history.details': '转写与时间戳',
+      'history.fullText': '查看转写',
+      'history.rename': '重命名',
+      'history.title': '录音标题',
+      'history.save': '保存',
+      'history.active': '录音中',
+      'history.interrupted': '录音中断 · 已保留已保存的内容',
+      'history.pending': '{n} 段待转写',
+      'history.retrySegment': '重转此段',
+      'history.retrying': '重转中…',
+      'history.emptySegment': '未识别到文字',
+      'history.derivedStale': '转写已更新，现有整理稿、译文或报告可能缺少新补转的内容。',
+      'archive.noRecorder': '当前环境无法保存音频，仍会保存转写。',
+      'archive.captureInterrupted': '麦克风或录音中断，正在保留已采集内容。',
+      'archive.segmentFailed': '此片段转写失败',
+      'archive.segmentWrites': '还有片段尚未保存',
+      'archive.retrySave': '重试保存',
+      'archive.saving': '正在保存…',
+      'archive.pending': '{n} 段暂未转写。可到「语音速记 → 录音历史」重转。',
+      'model.edit': '模型整理',
+      'model.edited': '整理稿',
+      'model.editing': '模型整理中…',
+      'model.editError': '整理失败：{message}',
+      'model.disclose': '整理、翻译和会议报告会将转写文字发送给 {provider}。音频保存在本机。',
+      'model.unavailable': '默认模型未就绪。整理、翻译和会议报告需要可用的模型。',
+      'result.insertEdited': '插入整理稿',
+      'recording.live': '录音中',
+      'recording.stop': '停止',
+      'recording.open': '查看语音速记',
+      'recording.stopping': '正在停止录音…',
+      'recording.finishingDraft': '正在完成听写…',
+      'recording.saving': '麦克风已关闭 · 正在保存',
+      'recording.processing': '{n} 段正在转写',
+      'recording.savedProcessing': '录音已保存 · {n} 段正在转写',
+      'recording.saved': '录音已保存',
+      'recording.saveFailed': '录音保存遇到问题',
+      'recording.draft': '仅插入草稿',
+      'recording.ready': '听写结果已就绪',
+      'recording.inserted': '已插入草稿',
+      'recording.insertedSaved': '已插入草稿 · 录音已保存',
+      'recording.originalDraft': '回到开始听写的会话可插入草稿。也可以复制文字。',
+      'recording.options': '翻译、整理和报告',
+      'recording.dictationSettings': '聊天听写偏好',
+      'recording.dictationHistory': '同时保存到录音历史',
+      'recording.dictationHint': '仅插入草稿时，听写音频和转写结果不会写入录音历史。',
+      'shortcut.label': '开始／停止听写',
+      'shortcut.off': '关闭快捷键',
+      'shortcut.hint': '快捷键在 Harness 窗口内生效。',
+      'archive.localPending': '{n} 段听写失败，可在此重转。',
+      'archive.retryLocal': '重转失败片段',
+      'history.jump': '定位匹配片段',
+      'history.nextMatch': '下一处匹配',
+      'history.correct': '校对',
+      'history.correction': '校对稿',
+      'history.original': '原始转写',
+      'history.restore': '恢复原始转写',
+      'history.exportOriginal': '下载原始转写',
+      'history.exportCorrected': '下载校对稿',
+    };
+
+    const EN = {
+      dictate: 'Voice input (live transcription)',
+      'phase.requesting': 'Requesting microphone…',
+      'phase.recording': 'Listening',
+      'phase.finishing': 'Finishing transcript…',
+      'phase.ready': 'Speech model ready',
+      'bar.stop': 'Stop and keep transcript',
+      'bar.cancel': 'Cancel recording',
+      'bar.translate': 'Live translation',
+      'bar.translateOn': 'Translation is on; finished phrases are translated',
+      'translate.off': 'No translation',
+      'translate.title': 'Translate to',
+      'translate.enable': 'Translate',
+      'translate.auto': 'Auto',
+      'language.title': 'Recognition language',
+      'language.hint': 'Used for on-device recognition. Model editing is a separate option.',
+      'bar.elapsed': '{time}',
+      'bar.retry': 'Record again',
+      'bar.close': 'Close',
+      'live.empty': 'Speak and the words will appear here…',
+      'live.hint': 'Pauses split phrases; recording continues in the background. Stop inserts the transcript.',
+      'live.translating': 'Translating…',
+      'live.translation': 'Translation',
+      'setup.title': 'Set up local speech recognition',
+      'setup.body':
+        'SenseVoiceSmall runs on this machine; audio never leaves it. The first use downloads the model (about {size}).',
+      'setup.download': 'Download and prepare',
+      'setup.later': 'Later',
+      'setup.cancel': 'Cancel download',
+      'setup.preparing': 'Preparing the model…',
+      'setup.ready': 'The model is ready. You can start recording.',
+      'setup.start': 'Start recording',
+      'setup.failed': 'Preparation failed: {message}',
+      'setup.retry': 'Retry',
+      'setup.source': 'Download source',
+      'setup.sourceAuto': 'Automatic',
+      'setup.disk': 'About {size} on disk',
+      'setup.step.check': 'Checking cache',
+      'setup.step.model': 'Downloading model',
+      'setup.step.vad': 'Downloading VAD',
+      'setup.step.verify': 'Verifying files',
+      'setup.step.load': 'Loading model',
+      'setup.unavailable': 'Speech service is not connected. Make sure the voice plugin is enabled.',
+      'result.title': 'Transcript ready',
+      'result.empty': 'No speech was recognized',
+      'result.insert': 'Insert into draft',
+      'result.insertTranslation': 'Insert translation',
+      'result.insertBoth': 'Insert both',
+      'result.copy': 'Copy',
+      'result.discard': 'Close',
+      'result.copied': 'Copied',
+      'error.title': 'Voice input failed',
+      'error.retry': 'Retry',
+      'error.close': 'Close',
+      'error.blocked': 'Microphone access was denied. Allow DeepSeek Harness in System Settings.',
+      'error.unavailable': 'Recording is unavailable in this environment.',
+      'error.nodevice': 'No microphone was found.',
+      'error.empty': 'No audio was captured.',
+      'error.tooLong': 'Recording is too long and was stopped.',
+      'studio.title': 'Voice Notes',
+      'studio.subtitle': 'On-device recognition · recordings are archived automatically',
+      'studio.record': 'Start recording',
+      'studio.stop': 'Stop and save',
+      'studio.cancel': 'Cancel',
+      'studio.again': 'Record again',
+      'studio.close': 'Close',
+      'studio.saved': 'Saved to recording history',
+      'studio.saveFailed': 'Could not save the recording: {message}',
+      'studio.history': 'Recording history',
+      'studio.count': '{n} items',
+      'studio.refresh': 'Refresh',
+      'studio.path': 'Saved in',
+      'studio.copyPath': 'Copy path',
+      'studio.loading': 'Loading recordings…',
+      'studio.empty': 'No recordings yet. Start with the microphone above.',
+      'studio.noAudio': 'No audio',
+      'studio.noText': '(no transcript)',
+      'studio.copy': 'Copy text',
+      'studio.copied': 'Copied',
+      'studio.download': 'Download audio',
+      'studio.delete': 'Delete',
+      'studio.confirmDelete': 'Delete this recording and its audio?',
+      'studio.expand': 'Expand',
+      'studio.collapse': 'Collapse',
+      'studio.retry': 'Retry',
+      'studio.model': 'Speech model',
+      'studio.ready': 'Ready',
+      'studio.preparing': 'Preparing',
+      'studio.unprepared': 'Download needed',
+      'studio.historyEmpty': 'History is empty',
+      'studio.report': 'Meeting report',
+      'studio.reportHint': 'Generated by the default model after recording',
+      'studio.generating': 'Writing the meeting report…',
+      'studio.generate': 'Generate meeting report',
+      'studio.copyReport': 'Copy report',
+      'studio.reportFailed': 'Could not generate the meeting report: {message}',
+      'studio.hint': 'Audio is saved as you record. After stopping, view the transcript here or listen in History.',
+      'history.search': 'Search titles, transcripts or reports',
+      'history.noMatch': 'No matching recordings.',
+      'history.more': 'Next page',
+      'history.previous': 'Previous page',
+      'history.details': 'Transcript and timestamps',
+      'history.fullText': 'View transcript',
+      'history.rename': 'Rename',
+      'history.title': 'Recording title',
+      'history.save': 'Save',
+      'history.active': 'Recording',
+      'history.interrupted': 'Recording interrupted. Saved content is available.',
+      'history.pending': '{n} segments awaiting transcription',
+      'history.retrySegment': 'Retry segment',
+      'history.retrying': 'Transcribing…',
+      'history.emptySegment': 'No speech recognized',
+      'history.derivedStale': 'The transcript was updated. Existing edits, translations or reports may be missing recovered text.',
+      'archive.noRecorder': 'Audio cannot be archived in this environment. The transcript will still be saved.',
+      'archive.captureInterrupted': 'The microphone or recorder disconnected. Captured content is being saved.',
+      'archive.segmentFailed': 'Segment transcription failed',
+      'archive.segmentWrites': 'Some segments have not been saved',
+      'archive.retrySave': 'Retry saving',
+      'archive.saving': 'Saving…',
+      'archive.pending': '{n} segments still need transcription. Retry them in Voice Notes → Recording history.',
+      'model.edit': 'Model editing',
+      'model.edited': 'Edited transcript',
+      'model.editing': 'Editing transcript…',
+      'model.editError': 'Could not edit the transcript: {message}',
+      'model.disclose': 'Editing, translation and reports send transcript text to {provider}. Audio stays on this device.',
+      'model.unavailable': 'A default model is needed for editing, translation and reports.',
+      'result.insertEdited': 'Insert edited transcript',
+      'recording.live': 'Recording',
+      'recording.stop': 'Stop',
+      'recording.open': 'Open Voice Notes',
+      'recording.stopping': 'Stopping recording…',
+      'recording.finishingDraft': 'Finishing dictation…',
+      'recording.saving': 'Microphone off · Saving',
+      'recording.processing': 'Transcribing {n} segments',
+      'recording.savedProcessing': 'Recording saved · Transcribing {n} segments',
+      'recording.saved': 'Recording saved',
+      'recording.saveFailed': 'Could not save the full recording',
+      'recording.draft': 'Insert into draft only',
+      'recording.ready': 'Dictation ready',
+      'recording.inserted': 'Inserted into draft',
+      'recording.insertedSaved': 'Inserted into draft · Recording saved',
+      'recording.originalDraft': 'Return to the conversation where you started to insert the draft, or copy the text.',
+      'recording.options': 'Translation, editing and reports',
+      'recording.dictationSettings': 'Chat dictation preferences',
+      'recording.dictationHistory': 'Also save to recording history',
+      'recording.dictationHint': 'Draft-only dictation keeps audio and transcripts out of recording history.',
+      'shortcut.label': 'Start or stop dictation',
+      'shortcut.off': 'Shortcut off',
+      'shortcut.hint': 'The shortcut works inside the Harness window.',
+      'archive.localPending': '{n} segments failed. You can retry them here.',
+      'archive.retryLocal': 'Retry failed segments',
+      'history.jump': 'Go to matched segment',
+      'history.nextMatch': 'Next match',
+      'history.correct': 'Correct',
+      'history.correction': 'Corrected transcript',
+      'history.original': 'Original transcript',
+      'history.restore': 'Restore original',
+      'history.exportOriginal': 'Download original transcript',
+      'history.exportCorrected': 'Download corrected transcript',
+    };
+
+    const CSS = `
+.vl-root { display: flex; align-items: center; min-width: 0; }
+.vl-trigger { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary, #666); cursor: pointer; transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.vl-trigger:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); color: var(--dsw-alias-label-primary, #111); }
+.vl-trigger:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe); outline-offset: 1px; }
+.vl-trigger:disabled { opacity: .45; cursor: default; }
+.vl-trigger[data-recording="true"] { border-color: transparent; background: var(--dsw-alias-state-error-primary, #e5484d); color: #fff; }
+.vl-bar { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 8px; row-gap: 4px; min-width: 0; }
+.vl-round { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); color: var(--dsw-alias-label-secondary, #666); cursor: pointer; }
+.vl-round:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-3, rgba(0,0,0,.08)); color: var(--dsw-alias-label-primary, #111); }
+.vl-round[data-danger="true"] { background: var(--dsw-alias-state-error-primary, #e5484d); color: #fff; }
+.vl-round:disabled { opacity: .45; cursor: default; }
+.vl-wave { display: inline-flex; flex: none; align-items: center; gap: 2px; width: 46px; height: 20px; }
+.vl-wave i { display: block; width: 2px; min-height: 3px; border-radius: 2px; background: var(--dsw-alias-state-error-primary, #e5484d); transform-origin: center; transition: height .08s linear; }
+.vl-timer { flex: none; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--dsw-alias-label-secondary, #666); }
+.vl-status { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary, #666); }
+.vl-status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vl-pulse { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--dsw-alias-state-error-primary, #e5484d); animation: vl-pulse 1.1s ease-in-out infinite; }
+@keyframes vl-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.72); } }
+.vl-spin { flex: none; width: 13px; height: 13px; border: 1.6px solid var(--dsw-alias-border-l2, rgba(0,0,0,.15)); border-top-color: var(--dsw-alias-brand-primary, #4d6bfe); border-radius: 50%; animation: vl-rotate .8s linear infinite; }
+@keyframes vl-rotate { to { transform: rotate(360deg); } }
+.vl-toggle { display: inline-flex; flex: none; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--dsw-alias-label-secondary, #666); font: inherit; font-size: 12px; cursor: pointer; }
+.vl-toggle:hover { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); color: var(--dsw-alias-label-primary, #111); }
+.vl-toggle[aria-pressed="true"] { border-color: var(--dsw-alias-border-l1, rgba(0,0,0,.12)); background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); color: var(--dsw-alias-brand-primary, #4d6bfe); }
+.vl-overlay { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 30; display: flex; justify-content: center; padding: 0 8px 8px; pointer-events: none; }
+.vl-panel { box-sizing: border-box; width: 100%; max-width: var(--dsh-composer-card-max-width, 760px); max-height: min(38vh, 300px); display: flex; flex-direction: column; gap: 10px; padding: 13px 15px 12px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.1)); border-radius: 14px; background: var(--dsw-alias-bg-layer-1, #fff); box-shadow: 0 12px 36px -12px rgba(0,0,0,.28), 0 2px 10px -2px rgba(0,0,0,.12); color: var(--dsw-alias-label-primary, #111); pointer-events: auto; animation: vl-in .16s ease-out; }
+@keyframes vl-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.vl-head { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.vl-title { font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+.vl-sub { font-size: 11.5px; color: var(--dsw-alias-label-tertiary, #888); }
+.vl-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.vl-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14.5px; line-height: 1.55; user-select: text; }
+.vl-text[data-empty="true"] { color: var(--dsw-alias-label-caption, #999); }
+.vl-partial { color: var(--dsw-alias-label-secondary, #777); }
+.vl-translation { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--dsw-alias-border-l1, rgba(0,0,0,.1)); }
+.vl-label { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; color: var(--dsw-alias-label-tertiary, #888); text-transform: uppercase; }
+.vl-label b { padding: 0 4px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.06)); font-size: 9.5px; }
+.vl-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.vl-actions .vl-grow { flex: 1; }
+.vl-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 28px; padding: 0 11px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); border-radius: 8px; background: transparent; color: var(--dsw-alias-label-primary, #111); font: inherit; font-size: 12px; cursor: pointer; }
+.vl-btn:hover:not(:disabled) { background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.05)); }
+.vl-btn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #4d6bfe); outline-offset: 1px; }
+.vl-btn:disabled { opacity: .5; cursor: default; }
+.vl-btn[data-primary="true"] { border-color: transparent; background: var(--dsw-alias-button-info-fill, #4d6bfe); color: #fff; }
+.vl-btn[data-primary="true"]:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover, #3b57d6); }
+.vl-btn[data-quiet="true"] { border-color: transparent; color: var(--dsw-alias-label-secondary, #666); }
+.vl-error { color: var(--dsw-alias-state-error-primary, #d93036); font-size: 12px; }
+.vl-note { font-size: 11.5px; line-height: 17px; color: var(--dsw-alias-label-secondary, #666); }
+.vl-note[data-tone="error"] { color: var(--dsw-alias-state-error-primary, #d93036); }
+.vl-progress { width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: var(--dsw-alias-bg-layer-2, rgba(0,0,0,.08)); }
+.vl-progress i { display: block; height: 100%; border-radius: inherit; background: var(--dsw-alias-brand-primary, #4d6bfe); transition: width .3s ease; }
+.vl-progress[data-indeterminate="true"] i { width: 38% !important; animation: vl-slide 1.2s ease-in-out infinite; }
+@keyframes vl-slide { 0% { transform: translateX(-110%); } 100% { transform: translateX(280%); } }
+.vl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.vl-source { flex: none; width: auto; max-width: 108px; height: 26px; padding: 0 18px 0 6px; font-size: 11.5px; }
+.vl-target { flex: none; width: auto; max-width: 118px; height: 26px; padding: 0 18px 0 6px; font-size: 11.5px; }
+.vl-select { height: 27px; max-width: 240px; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l1, rgba(0,0,0,.12)); border-radius: 7px; background: var(--dsw-alias-bg-layer-1, #fff); color: var(--dsw-alias-label-primary, #111); font: inherit; font-size: 11.5px; }
+.vl-translation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary, #555); user-select: text; }
+.vl-sep { flex: 1; }
+@media (prefers-reduced-motion: reduce) { .vl-pulse, .vl-spin, .vl-progress[data-indeterminate="true"] i, .vl-panel { animation: none; } }
+.vls-page { height: 100%; overflow-y: auto; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 14px; }
+.vls-inner { max-width: 880px; margin: 0 auto; padding: 28px 30px 48px; }
+.vls-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.vls-title { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+.vls-sub { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
+.vls-head-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.vls-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 16px; background: var(--dsw-alias-bg-layer-1); padding: 16px 16px 14px; }
+.vls-rec { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.vls-mic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 54px; height: 54px; padding: 0; border: 0; border-radius: 50%; background: var(--dsw-alias-button-info-fill); color: #fff; cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); transition: background .15s ease, transform .12s ease; }
+.vls-mic:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover); transform: translateY(-1px); }
+.vls-mic:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 3px; }
+.vls-mic:disabled { opacity: .5; cursor: default; }
+.vls-mic[data-recording="true"] { background: var(--dsw-alias-state-error-primary); }
+.vls-mic[data-recording="true"]:hover { background: var(--dsw-alias-state-error-primary); }
+.vls-rec-main { min-width: 0; }
+.vls-time { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .01em; line-height: 1.1; }
+.vls-rec-state { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.vls-lang { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.vls-lang .vl-label { margin: 0; }
+.vl-translate-control { display: inline-flex; align-items: center; gap: 4px; }
+.vl-check { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--dsw-alias-label-secondary); cursor: pointer; white-space: nowrap; }
+.vl-check input { margin: 0; accent-color: var(--dsw-alias-brand-primary); }
+.vls-rec-side { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
+.vls-live { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.vls-live-text { margin: 0; max-height: 240px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 15px; line-height: 1.6; user-select: text; }
+.vls-live-text[data-empty="true"] { color: var(--dsw-alias-label-caption); }
+.vls-live-translation { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--dsw-alias-border-l1); }
+.vls-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.vls-actions .vl-grow { flex: 1; }
+.vls-save { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: 11.5px; color: var(--dsw-alias-state-success-primary); }
+.vls-save[data-error="true"] { color: var(--dsw-alias-state-error-primary); }
+.vls-setup { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.vls-history { margin-top: 26px; }
+.vls-history-head { display: flex; align-items: baseline; gap: 8px; }
+.vls-title2 { margin: 0; font-size: 15px; font-weight: 600; }
+.vls-count { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
+.vls-history-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.vls-path { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 8px 0 12px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.vls-path code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
+.vls-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.vls-item { border: 1px solid var(--dsw-alias-border-l1); border-radius: 13px; background: var(--dsw-alias-bg-layer-1); padding: 12px 14px 11px; }
+.vls-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.vls-item-title { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.vls-item-actions { display: flex; align-items: center; gap: 3px; margin-left: auto; }
+.vls-mini { display: inline-flex; align-items: center; justify-content: center; height: 24px; padding: 0 7px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; text-decoration: none; cursor: pointer; }
+.vls-mini:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.vls-mini[data-danger="true"]:hover { color: var(--dsw-alias-state-error-primary); }
+.vls-item-text { display: -webkit-box; margin: 8px 0 0; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.55; user-select: text; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.vls-item-text[data-open="true"] { display: block; -webkit-line-clamp: unset; }
+.vls-item-text[data-empty="true"] { color: var(--dsw-alias-label-caption); }
+.vls-report-summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.vls-report-block { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--dsw-alias-border-l1); }
+.vls-report-text { margin: 8px 0; max-height: 300px; overflow: auto; padding: 9px 10px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2); white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55; color: var(--dsw-alias-label-primary); user-select: text; }
+.vls-trans-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary); user-select: text; }
+.vls-item-trans { margin: 7px 0 0; padding-top: 7px; border-top: 1px dashed var(--dsw-alias-border-l1); font-size: 12.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
+.vls-more { padding: 2px 0 0; border: 0; background: none; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 11px; cursor: pointer; }
+.vls-audio { width: 100%; height: 32px; margin-top: 10px; }
+.vls-empty { padding: 30px 20px; border: 1px dashed var(--dsw-alias-border-l1); border-radius: 12px; text-align: center; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+.vls-error { margin: 8px 0; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); word-break: break-word; }
+.vls-loading { display: flex; align-items: center; gap: 8px; padding: 16px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+.vls-input { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1, #aaa); border-radius: 6px; color: inherit; font: inherit; padding: 5px 8px; }
+.vls-search { width: min(100%, 260px); }
+.vls-segments { display: grid; gap: 6px; padding: 0; margin: 8px 0; list-style: none; }
+.vls-segment { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #ddd); }
+.vls-segment-text { flex: 1 1 14rem; white-space: pre-wrap; }
+.vls-segment time, .vls-seek { font-variant-numeric: tabular-nums; }
+.vls-morepage { margin-top: 12px; }
+.vl-global { -webkit-app-region: no-drag; position: fixed; inset: 10px auto auto 50%; translate: -50% 0; z-index: 40; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 24px); padding: 5px 7px 5px 10px; border: 1px solid var(--dsw-alias-border-l1, #bbb); border-radius: 9px; background: var(--dsw-alias-bg-layer-1, #fff); color: var(--dsw-alias-label-primary, #111); box-shadow: 0 3px 12px #0002; font: 600 12px/1.4 system-ui, sans-serif; }
+.vl-global[hidden], .vl-global [hidden] { display: none; }
+.vl-global-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vl-global .vl-btn { padding: 3px 7px; white-space: nowrap; }
+.vls-options { margin-top: 9px; }
+.vls-options summary { color: var(--dsw-alias-label-secondary); cursor: pointer; font-size: 12px; }
+.vls-options-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 9px; }
+.vls-segment[aria-current="true"] { background: var(--dsw-alias-brand-primary-soft, color-mix(in srgb, var(--dsw-alias-brand-primary, #456df2) 13%, transparent)); border-radius: 6px; }
+.vls-segment, .vls-item-text { scroll-margin-block: 4rem; }
+.vls-segment mark, .vls-item-text mark { background: #fae199; color: #251900; }
+.vls-correct { flex-basis: 100%; display: grid; gap: 6px; }
+.vls-correct textarea { resize: vertical; width: 100%; box-sizing: border-box; }
+.vls-foot { margin-top: 18px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+@media (max-width: 640px) { .vls-inner { padding: 18px 16px 36px; } .vls-rec-side { margin-left: 0; } }
+`;
+
+    /** Tiny external store: the activity bar and the floating panel share it. */
+    function createStore(initial) {
+      let state = initial;
+      const listeners = new Set();
+      return {
+        get: () => state,
+        set(patch) {
+          const next = typeof patch === 'function' ? patch(state) : { ...state, ...patch };
+          if (next === state) return;
+          state = next;
+          for (const listener of [...listeners]) listener();
+        },
+        subscribe(listener) {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      };
+    }
+
+    function readPrefs() {
+      try {
+        const value = JSON.parse(window.localStorage.getItem('voice-live:prefs') ?? '{}');
+        return value && typeof value === 'object' ? value : {};
+      } catch {
+        return {};
+      }
+    }
+
+    function savePrefs(patch) {
+      try {
+        const current = readPrefs();
+        window.localStorage.setItem('voice-live:prefs', JSON.stringify({ ...current, ...patch }));
+      } catch {
+        /* storage unavailable */
+      }
+    }
+
+    const prefs = readPrefs();
+    const savedModelPermission = typeof prefs.modelPermission === 'string' ? prefs.modelPermission : '';
+    const savedTarget = savedModelPermission && TARGETS.some(([id]) => id === prefs.targetLanguage)
+      ? prefs.targetLanguage
+      : 'off';
+    const savedSource = SOURCE_LANGUAGES.some(([id]) => id === prefs.sourceLanguage)
+      ? prefs.sourceLanguage
+      : 'auto';
+    const initialState = {
+      phase: 'idle',
+      surface: 'composer',
+      archiveError: '',
+      lastRecording: null,
+      historyVersion: 0,
+      report: '',
+      reporting: false,
+      reportError: '',
+      reportMode: Boolean(savedModelPermission) && prefs.reportMode === true,
+      modelPermission: savedModelPermission,
+      dictationHistory: prefs.dictationHistory === true,
+      shortcut: SHORTCUTS.some(([code]) => code === prefs.shortcut) ? prefs.shortcut : 'off',
+      archiveStage: '',
+      transcribingSegments: 0,
+      savedNotice: '',
+      targetLanguage: savedTarget,
+      sourceLanguage: savedSource,
+      translate: savedTarget !== 'off',
+      editMode: Boolean(savedModelPermission) && prefs.editMode === true,
+      editedText: '',
+      editError: '',
+      editing: false,
+      pendingSegments: 0,
+      captureWarning: '',
+      retrySaving: false,
+      status: null,
+      statusError: '',
+      providerId: '',
+      preparing: false,
+      prepareError: '',
+      downloadSource: '',
+      setupOpen: false,
+      elapsed: 0,
+      level: 0,
+      finalText: '',
+      partialText: '',
+      translationText: '',
+      translationLabel: '译',
+      translating: false,
+      translateError: '',
+      result: null,
+      error: '',
+      notice: '',
+      copied: false,
+    };
+
+    const store = createStore(initialState);
+
+    const engine = {
+      sessionId: undefined,
+      generation: 0,
+      beginSeq: 0,
+      inputActions: null,
+      activeComposer: null,
+      capture: null,
+      segment: null,
+      segmentSeq: 0,
+      timers: [],
+      prepareTimer: undefined,
+      partialBusy: false,
+      finalChain: Promise.resolve(),
+      insertSpan: null,
+      startedAt: 0,
+      lastVoiceAt: 0,
+      hasSpeech: false,
+      lastPartialAt: 0,
+      level: 0,
+      lastLevelUi: 0,
+      abort: undefined,
+      audio: null,
+      run: null,
+      pcmSamples: 0,
+      noticeTimer: undefined,
+    };
+
+    let localeBound;
+    const messageOf = (error) =>
+      error instanceof Error ? error.message : String(error ?? '未知错误');
+
+    /** Locale fallback for slots that do not inject `t` (the main panel). */
+    function translate(key, vars) {
+      let value = localeBound ? localeBound(key) : undefined;
+      if (!value || value === key) value = ZH[key] || EN[key] || key;
+      if (vars) {
+        for (const [name, replacement] of Object.entries(vars)) {
+          value = value.replaceAll(`{${name}}`, () => String(replacement));
+        }
+      }
+      return value;
+    }
+
+    function resetSessionState() {
+      if (engine.run && !engine.run.id) {
+        engine.run.segmentFailures.clear();
+        engine.run.localTexts.clear();
+      }
+      store.set({
+        elapsed: 0,
+        level: 0,
+        finalText: '',
+        editedText: '',
+        editing: false,
+        editError: '',
+        pendingSegments: 0,
+        captureWarning: '',
+        retrySaving: false,
+        archiveStage: '',
+        transcribingSegments: 0,
+        savedNotice: '',
+        partialText: '',
+        translationText: '',
+        translationLabel: '译',
+        translating: false,
+        translateError: '',
+        result: null,
+        error: '',
+        notice: '',
+        copied: false,
+        surface: 'composer',
+        archiveError: '',
+        lastRecording: null,
+        report: '',
+        reporting: false,
+        reportError: '',
+      });
+    }
+
+    function newSegment() {
+      return { id: engine.segmentSeq++, start: engine.pcmSamples, samples: [], count: 0 };
+    }
+
+    function clearTimers() {
+      for (const timer of engine.timers) clearInterval(timer);
+      engine.timers = [];
+    }
+
+    function clearPrepareTimer() {
+      if (engine.prepareTimer !== undefined) {
+        clearInterval(engine.prepareTimer);
+        engine.prepareTimer = undefined;
+      }
+    }
+
+    function providerOf(status) {
+      if (!status) return undefined;
+      const id = status.selection?.providerId;
+      return (status.providers ?? []).find((provider) => provider.id === id) ?? status.providers?.[0];
+    }
+
+    function isUsable(provider) {
+      const phase = provider?.preparation?.phase;
+      return phase === 'ready' || phase === 'standby';
+    }
+
+    async function readJsonResponse(response) {
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (!response.ok || !body || body.ok === false) {
+        const message = body?.error?.message || `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+      return body;
+    }
+
+    async function fetchStatus() {
+      const response = await fetch(`${API}/status`, { cache: 'no-store' });
+      const body = await readJsonResponse(response);
+      const state = store.get();
+      if (state.modelPermission && state.modelPermission !== modelKey(body.model) &&
+          !['recording', 'finishing'].includes(state.phase)) {
+        const choices = { modelPermission: '', editMode: false, reportMode: false, targetLanguage: 'off' };
+        savePrefs(choices);
+        store.set({ ...choices, translate: false });
+      }
+      store.set({ status: body, statusError: '' });
+      return body;
+    }
+
+    /** Encode float samples as the canonical 16 kHz mono PCM16 WAV. */
+    function encodeWave(chunks, sampleRate) {
+      let total = 0;
+      for (const chunk of chunks) total += chunk.length;
+      const source = new Float32Array(total);
+      let at = 0;
+      for (const chunk of chunks) {
+        source.set(chunk, at);
+        at += chunk.length;
+      }
+      let samples;
+      if (sampleRate === SAMPLE_RATE) {
+        samples = source;
+      } else {
+        const ratio = SAMPLE_RATE / sampleRate;
+        const length = Math.max(1, Math.floor(total * ratio));
+        samples = new Float32Array(length);
+        for (let index = 0; index < length; index += 1) {
+          const position = index / ratio;
+          const base = Math.floor(position);
+          const fraction = position - base;
+          const a = source[base] ?? 0;
+          const b = base + 1 < total ? source[base + 1] : a;
+          samples[index] = a + (b - a) * fraction;
+        }
+      }
+      const bytes = new Uint8Array(44 + samples.length * 2);
+      const view = new DataView(bytes.buffer);
+      const ascii = (text, offset) => {
+        for (let index = 0; index < text.length; index += 1) {
+          bytes[offset + index] = text.charCodeAt(index);
+        }
+      };
+      ascii('RIFF', 0);
+      view.setUint32(4, bytes.length - 8, true);
+      ascii('WAVE', 8);
+      ascii('fmt ', 12);
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, SAMPLE_RATE, true);
+      view.setUint32(28, SAMPLE_RATE * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      ascii('data', 36);
+      view.setUint32(40, samples.length * 2, true);
+      for (let index = 0; index < samples.length; index += 1) {
+        const value = Math.max(-1, Math.min(1, samples[index]));
+        view.setInt16(44 + index * 2, Math.round(value * (value < 0 ? 32768 : 32767)), true);
+      }
+      return bytes;
+    }
+
+    function base64Of(bytes) {
+      let text = '';
+      for (let index = 0; index < bytes.length; index += 8192) {
+        text += String.fromCharCode(...bytes.subarray(index, index + 8192));
+      }
+      return btoa(text);
+    }
+
+    async function request(path, { method = 'POST', json, bytes } = {}) {
+      const response = await fetch(`${API}${path}`, {
+        method,
+        ...(json !== undefined ? {
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(json),
+        } : bytes !== undefined ? {
+          headers: { 'content-type': 'application/octet-stream' },
+          body: bytes,
+        } : {}),
+        signal: AbortSignal.timeout(bytes ? 8000 : 100_000),
+      });
+      return readJsonResponse(response);
+    }
+
+    function archivePath(run) {
+      return `/recordings/${run.id}`;
+    }
+
+    /** Retry idempotent writes when the host is temporarily unavailable. */
+    async function writeArchive(path, options) {
+      try {
+        return await request(path, options);
+      } catch {
+        return request(path, options);
+      }
+    }
+
+    function noteArchiveError(run, error) {
+      if (engine.run === run) {
+        store.set({ archiveError: `录音保存失败：${messageOf(error)}` });
+      }
+    }
+
+    function pumpAudio(run) {
+      if (run.audioPump) return run.audioPump;
+      if (!run.audioQueue.length) return Promise.resolve();
+      run.audioPump = (async () => {
+        while (run.audioQueue.length) {
+          const { sequence, bytes, duration } = run.audioQueue[0];
+          await writeArchive(`${archivePath(run)}/chunks/${sequence}?duration=${duration}`, {
+            method: 'PUT',
+            bytes,
+          });
+          run.audioQueue.shift();
+        }
+      })().finally(() => { run.audioPump = null; });
+      return run.audioPump;
+    }
+
+    function flushRecorder(capture) {
+      return new Promise((resolve) => {
+        const recorder = capture?.recorder;
+        if (!recorder || recorder.state === 'inactive') {
+          resolve();
+          return;
+        }
+        const finish = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(finish, 2500);
+        recorder.addEventListener('stop', finish, { once: true });
+        try {
+          recorder.stop();
+        } catch {
+          finish();
+        }
+      });
+    }
+
+    async function putSegment(run, segment, checkpoint = false) {
+      const { id, wave, start, end } = segment;
+      const query = new URLSearchParams({ start, end, checkpoint: checkpoint ? '1' : '0' });
+      await writeArchive(`${archivePath(run)}/segments/${id}?${query}`, { method: 'PUT', bytes: wave });
+    }
+
+    async function sealArchive(run) {
+      try {
+        await pumpAudio(run);
+        await Promise.all([...run.segmentWrites]);
+        if (run.segmentFailures.size) throw new Error(translate('archive.segmentWrites'));
+        const { recording } = await writeArchive(archivePath(run), {
+          method: 'PATCH',
+          json: { status: run.interrupted ? 'interrupted' : 'complete', duration: run.duration },
+        });
+        run.sealed = true;
+        store.set((state) => ({
+          ...state,
+          ...(engine.run === run ? { lastRecording: recording, archiveError: '', archiveStage: 'saved' } : {}),
+          historyVersion: state.historyVersion + 1,
+        }));
+        return recording;
+      } catch (error) {
+        noteArchiveError(run, error);
+        store.set((state) => ({
+          ...state,
+          ...(engine.run === run ? { archiveStage: 'failed' } : {}),
+          historyVersion: state.historyVersion + 1,
+        }));
+        return null;
+      }
+    }
+
+    async function retryArchive() {
+      const run = engine.run;
+      if (!run || run.sealed || store.get().retrySaving) return;
+      store.set({ retrySaving: true, archiveStage: 'saving' });
+      try {
+        for (const segment of run.segmentFailures.values()) {
+          await putSegment(run, segment);
+          run.segmentFailures.delete(segment.id);
+          void request(`${archivePath(run)}/segments/${segment.id}/retry?live=1`)
+            .then(() => store.set((state) => ({ ...state, historyVersion: state.historyVersion + 1 })))
+            .catch(() => {});
+        }
+        await sealArchive(run);
+      } catch (error) {
+        noteArchiveError(run, error);
+      } finally {
+        if (engine.run === run) store.set({ retrySaving: false });
+      }
+    }
+
+    /** Late model results stay attached to the recording that requested them. */
+    async function patchArchive(run, patch) {
+      if (!run?.id) return;
+      try {
+        const { recording } = await request(archivePath(run), { method: 'PATCH', json: patch });
+        store.set((state) => ({
+          ...state,
+          ...(engine.run === run ? { lastRecording: recording } : {}),
+          historyVersion: state.historyVersion + 1,
+        }));
+      } catch (error) {
+        noteArchiveError(run, error);
+      }
+    }
+
+    async function transcribeWave(wave, signal, language = engine.run?.language || 'auto') {
+      const response = await fetch(`${API}/transcribe`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          audioBase64: base64Of(wave),
+          language,
+        }),
+        signal,
+      });
+      const body = await readJsonResponse(response);
+      return String(body.text ?? '').trim();
+    }
+
+    function joinText(left, right) {
+      const a = String(left ?? '').trimEnd();
+      const b = String(right ?? '').trim();
+      if (!a) return b;
+      if (!b) return a;
+      const last = a[a.length - 1];
+      const first = b[0];
+      if (/[\u3400-\u9fff。，、；：！？…—）》”’】]/.test(last)) return a + b;
+      if (/[。，、；：！？…—）》”’】]/.test(first)) return a + b;
+      return `${a} ${b}`;
+    }
+
+    function targetLabel(code) {
+      const found = TARGETS.find(([id]) => id === code);
+      return found && found[0] !== 'off' ? found[1] : '译';
+    }
+
+    function shouldTranslate(text, target) {
+      const source = engine.run?.language ?? store.get().sourceLanguage;
+      return Boolean(text && target && target !== 'off' && target !== source);
+    }
+
+    function micError(error) {
+      const name = error?.name ?? '';
+      if (name === 'NotAllowedError' || name === 'SecurityError') return 'blocked';
+      if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'nodevice';
+      if (name === 'NotSupportedError') return 'unavailable';
+      return messageOf(error) || 'unavailable';
+    }
+
+    /** Create/resume the one shared AudioContext while a user gesture is live. */
+    function ensureAudio() {
+      if (engine.audio && engine.audio.state !== 'closed') {
+        if (engine.audio.state === 'suspended') void engine.audio.resume().catch(() => {});
+        return engine.audio;
+      }
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return undefined;
+      try {
+        engine.audio = new AudioContextClass({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' });
+      } catch {
+        engine.audio = new AudioContextClass();
+      }
+      if (engine.audio.state === 'suspended') void engine.audio.resume().catch(() => {});
+      return engine.audio;
+    }
+
+    /** Pick a container the current Chromium can actually record and play. */
+    function pickRecorderMime() {
+      if (typeof MediaRecorder === 'undefined') return undefined;
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4',
+      ];
+      for (const type of candidates) {
+        try {
+          if (MediaRecorder.isTypeSupported(type)) return type;
+        } catch {
+          /* try the next container */
+        }
+      }
+      return undefined;
+    }
+
+    async function openMicrophone(archive) {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw Object.assign(new Error('unavailable'), { name: 'NotSupportedError' });
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+        video: false,
+      });
+      const audio = engine.audio ?? ensureAudio();
+      if (!audio) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw Object.assign(new Error('unavailable'), { name: 'NotSupportedError' });
+      }
+      if (audio.state === 'suspended') await audio.resume();
+      const source = audio.createMediaStreamSource(stream);
+      const mute = audio.createGain();
+      // A tiny non-zero gain keeps the graph audible to the renderer without
+      // producing feedback; zero-gain branches are skipped by some engines.
+      mute.gain.value = 0.00001;
+      mute.connect(audio.destination);
+      let worklet;
+      let processor;
+      if (audio.audioWorklet) {
+        try {
+          if (!audio.__voiceLiveWorklet) {
+            const url = URL.createObjectURL(
+              new Blob([WORKLET_SOURCE], { type: 'application/javascript' }),
+            );
+            await audio.audioWorklet.addModule(url);
+            URL.revokeObjectURL(url);
+            audio.__voiceLiveWorklet = true;
+          }
+          worklet = new AudioWorkletNode(audio, 'voice-live-capture', {
+            numberOfInputs: 1,
+            numberOfOutputs: 1,
+            channelCount: 1,
+            channelCountMode: 'explicit',
+          });
+          source.connect(worklet);
+          worklet.connect(mute);
+        } catch {
+          worklet = undefined;
+        }
+      }
+      if (!worklet) {
+        if (typeof audio.createScriptProcessor !== 'function') {
+          stream.getTracks().forEach((track) => track.stop());
+          throw Object.assign(new Error('unavailable'), { name: 'NotSupportedError' });
+        }
+        processor = audio.createScriptProcessor(4096, 1, 1);
+        source.connect(processor);
+        processor.connect(mute);
+      }
+      let recorder;
+      if (archive && typeof MediaRecorder !== 'undefined') {
+        try {
+          const mime = pickRecorderMime();
+          recorder = new MediaRecorder(stream, {
+            ...(mime ? { mimeType: mime } : {}),
+            audioBitsPerSecond: 16_000,
+          });
+        } catch {
+          recorder = undefined;
+        }
+      }
+      return {
+        stream,
+        audio,
+        source,
+        processor,
+        worklet,
+        mute,
+        recorder,
+        mimeType: recorder?.mimeType || 'audio/webm',
+        closed: false,
+      };
+    }
+
+    async function closeCapture() {
+      const capture = engine.capture;
+      engine.capture = null;
+      if (!capture || capture.closed) return;
+      capture.closed = true;
+      if (capture.recorder && capture.recorder.state !== 'inactive') {
+        try {
+          capture.recorder.onstop = null;
+          capture.recorder.stop();
+        } catch {
+          /* recorder already stopped */
+        }
+      }
+      try {
+        if (capture.worklet) {
+          capture.worklet.port.onmessage = null;
+          capture.worklet.disconnect();
+        }
+        if (capture.processor) {
+          capture.processor.onaudioprocess = null;
+          capture.processor.disconnect();
+        }
+        capture.source.disconnect();
+        capture.mute.disconnect();
+      } catch {
+        /* already disconnected */
+      }
+      for (const track of capture.stream.getTracks()) track.stop();
+    }
+
+    function ingestSamples(input, generation) {
+      if (generation !== engine.generation) return;
+      const phase = store.get().phase;
+      if (phase !== 'recording' && phase !== 'finishing') return;
+      const segment = engine.segment;
+      if (!segment) return;
+      const copy = new Float32Array(input.length);
+      copy.set(input);
+      segment.samples.push(copy);
+      segment.count += input.length;
+      engine.pcmSamples += input.length;
+      const now = Date.now();
+      if (phase !== 'recording') return;
+      const rate = engine.capture.audio.sampleRate;
+      if (segment.count >= rate * SEGMENT_SECONDS) {
+        finalizeSegment(generation, engine.run);
+        return;
+      }
+      if (
+        !engine.partialBusy &&
+        segment.count >= rate * 0.8 &&
+        now - engine.lastPartialAt >= PARTIAL_MS
+      ) {
+        void sendPartial(generation);
+      }
+      let sum = 0;
+      for (let index = 0; index < input.length; index += 1) sum += input[index] * input[index];
+      const rms = Math.sqrt(sum / input.length);
+      engine.level = engine.level * 0.72 + rms * 0.28;
+      if (rms >= VOICE_RMS) {
+        engine.hasSpeech = true;
+        engine.lastVoiceAt = now;
+      }
+      if (now - engine.lastLevelUi >= 90) {
+        engine.lastLevelUi = now;
+        store.set({ level: Math.min(1, Math.sqrt(engine.level) * 3.2) });
+      }
+    }
+
+    function installProcessor(capture, generation) {
+      if (capture.worklet) {
+        capture.worklet.port.onmessage = ({ data }) => {
+          if (data?.flushed) capture.flushDone?.();
+          else ingestSamples(data, generation);
+        };
+      } else if (capture.processor) {
+        capture.processor.onaudioprocess = (event) =>
+          ingestSamples(event.inputBuffer.getChannelData(0), generation);
+      }
+    }
+
+    function flushPcm(capture) {
+      return new Promise((resolve) => {
+        if (!capture?.worklet) {
+          resolve();
+          return;
+        }
+        capture.flushDone = () => {
+          clearTimeout(timer);
+          capture.flushDone = null;
+          resolve();
+        };
+        const timer = setTimeout(capture.flushDone, 350);
+        capture.worklet.port.postMessage('flush');
+      });
+    }
+
+    function snapshotSegment(segment, rate) {
+      return {
+        id: segment.id,
+        start: segment.start / rate,
+        end: (segment.start + segment.count) / rate,
+        wave: encodeWave(segment.samples, rate),
+      };
+    }
+
+    function startTicker(generation, run) {
+      const timer = setInterval(() => {
+        if (generation !== engine.generation || store.get().phase !== 'recording') return;
+        const now = Date.now();
+        store.set({ elapsed: Math.max(0, (now - engine.startedAt) / 1000) });
+        const segment = engine.segment;
+        const rate = engine.capture.audio.sampleRate;
+        const openSeconds = segment.count / rate;
+        if (openSeconds >= SEGMENT_SECONDS ||
+          (engine.hasSpeech && now - engine.lastVoiceAt >= SILENCE_MS && openSeconds >= MIN_SECONDS)) {
+          finalizeSegment(generation, run);
+        } else if (run.id && !run.checkpointBusy && openSeconds >= MIN_SECONDS && now - run.lastCheckpoint >= CHECKPOINT_MS) {
+          run.checkpointBusy = true;
+          run.lastCheckpoint = now;
+          putSegment(run, snapshotSegment(segment, rate), true)
+            .catch((error) => noteArchiveError(run, error))
+            .finally(() => { run.checkpointBusy = false; });
+        }
+      }, 180);
+      engine.timers.push(timer);
+    }
+
+    async function sendPartial(generation) {
+      if (engine.partialBusy || generation !== engine.generation) return;
+      const segment = engine.segment;
+      const capture = engine.capture;
+      if (!segment || !capture || segment.count < capture.audio.sampleRate * MIN_SECONDS) return;
+      const segId = segment.id;
+      engine.partialBusy = true;
+      engine.lastPartialAt = Date.now();
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('partial timeout')), 9000);
+      const signal =
+        engine.abort && typeof AbortSignal.any === 'function'
+          ? AbortSignal.any([engine.abort.signal, controller.signal])
+          : (engine.abort?.signal ?? controller.signal);
+      try {
+        const wave = encodeWave(segment.samples, capture.audio.sampleRate);
+        const text = await transcribeWave(wave, signal);
+        if (
+          generation === engine.generation &&
+          engine.segment?.id === segId &&
+          store.get().phase === 'recording'
+        ) {
+          store.set({ partialText: text });
+        }
+      } catch (error) {
+      } finally {
+        clearTimeout(timer);
+        engine.partialBusy = false;
+      }
+    }
+
+    function finalizeSegment(generation, run) {
+      const segment = engine.segment;
+      if (generation !== engine.generation || !segment?.count) return;
+      if (segment.count / run.sampleRate < 0.05) return;
+      const rate = engine.capture?.audio.sampleRate ?? run.sampleRate;
+      engine.segment = newSegment();
+      engine.hasSpeech = false;
+      engine.lastVoiceAt = 0;
+      engine.lastPartialAt = 0;
+      run.lastCheckpoint = Date.now();
+      store.set((state) => ({ ...state, partialText: '', transcribingSegments: state.transcribingSegments + 1 }));
+      const snapshot = snapshotSegment(segment, rate);
+      const stored = run.id ? putSegment(run, snapshot).then(() => true, (error) => {
+        run.segmentFailures.set(snapshot.id, snapshot);
+        noteArchiveError(run, error);
+        return false;
+      }) : Promise.resolve(false);
+      run.segmentWrites.add(stored);
+      void stored.then(() => run.segmentWrites.delete(stored));
+
+      engine.finalChain = engine.finalChain.then(async () => {
+        if (generation !== engine.generation) return;
+        try {
+          let text;
+          if (await stored) {
+            const { segment: part } = await request(`${archivePath(run)}/segments/${snapshot.id}/retry?live=1`);
+            if (part.state !== 'ready') throw new Error(part.error || translate('archive.segmentFailed'));
+            text = part.text;
+          } else {
+            text = await transcribeWave(snapshot.wave, engine.abort?.signal, run.language);
+          }
+          if (generation !== engine.generation || !text) return;
+          if (!run.id) run.localTexts.set(snapshot.id, text);
+          store.set({ finalText: joinText(store.get().finalText, text) });
+          if (store.get().translate) queueTranslation(text, generation, run);
+        } catch (error) {
+          if (generation !== engine.generation) return;
+          if (!run.id) run.segmentFailures.set(snapshot.id, snapshot);
+          store.set((state) => ({ ...state, pendingSegments: state.pendingSegments + 1 }));
+        } finally {
+          if (generation === engine.generation) {
+            store.set((state) => ({ ...state, transcribingSegments: state.transcribingSegments - 1 }));
+          }
+        }
+      });
+    }
+
+    async function retryDraftSegments() {
+      const run = engine.run;
+      const state = store.get();
+      if (!run || run.id || state.phase !== 'result' || state.retrySaving) return;
+      const generation = engine.generation;
+      store.set({ retrySaving: true });
+      for (const snapshot of run.segmentFailures.values()) {
+        try {
+          const text = await transcribeWave(snapshot.wave, engine.abort?.signal, run.language);
+          if (generation !== engine.generation || engine.run !== run) return;
+          run.localTexts.set(snapshot.id, text);
+          run.segmentFailures.delete(snapshot.id);
+        } catch {
+          if (generation !== engine.generation || engine.run !== run) return;
+        }
+      }
+      const text = [...run.localTexts].sort(([left], [right]) => left - right)
+        .reduce((whole, [, segment]) => joinText(whole, segment), '');
+      if (generation !== engine.generation || engine.run !== run) return;
+      const changed = text !== state.result?.text;
+      store.set({
+        result: { text }, finalText: text, pendingSegments: run.segmentFailures.size, retrySaving: false,
+        ...(changed ? { editedText: '', translationText: '' } : {}),
+      });
+      if (changed && state.translate) void queueTranslation(text, generation, run, true);
+      if (changed && state.editMode) void generateEditedText(text, generation, run);
+    }
+
+    function queueTranslation(text, generation, run, replace = false) {
+      const target = store.get().targetLanguage;
+      const revision = run.translationRevision;
+      if (!shouldTranslate(text, target)) return Promise.resolve();
+      const currentTarget = () => revision === run.translationRevision;
+      const visible = () => generation === engine.generation && currentTarget();
+      run.translateChain = run.translateChain.then(async () => {
+        if (!currentTarget()) return;
+        if (visible()) store.set({ translating: true, translateError: '' });
+        if (replace) run.translated = '';
+        try {
+          for (const chunk of splitText(text)) {
+            if (!currentTarget()) return;
+            const body = await request('/translate', {
+              json: { text: chunk, target, model: run.model },
+            });
+            if (!currentTarget()) return;
+            run.translated = joinText(run.translated, body.text);
+            if (visible()) store.set({ translationText: run.translated, translationLabel: targetLabel(target) });
+          }
+          await patchArchive(run, { translation: run.translated });
+        } catch (error) {
+          if (visible()) store.set({ translateError: messageOf(error) });
+        } finally {
+          if (visible()) store.set({ translating: false });
+        }
+      });
+      return run.translateChain;
+    }
+
+    function splitText(text, limit = 3500) {
+      const clean = String(text ?? '').trim();
+      if (!clean) return [];
+      const chunks = [];
+      let rest = clean;
+      while (rest.length > limit) {
+        const windowText = rest.slice(0, limit);
+        let cut = Math.max(
+          windowText.lastIndexOf('\n'),
+          windowText.lastIndexOf('。'),
+          windowText.lastIndexOf('！'),
+          windowText.lastIndexOf('？'),
+          windowText.lastIndexOf('. '),
+          windowText.lastIndexOf('; '),
+        );
+        if (cut < limit * 0.55) cut = limit;
+        chunks.push(rest.slice(0, cut).trim());
+        rest = rest.slice(cut).trim();
+      }
+      if (rest) chunks.push(rest);
+      return chunks;
+    }
+
+    async function generateEditedText(text, generation, run) {
+      store.set({ editing: true, editError: '' });
+      try {
+        let edited = '';
+        for (const chunk of splitText(text)) {
+          const body = await request('/normalize', {
+            json: { text: chunk, language: run.language, model: run.model },
+          });
+          edited = joinText(edited, body.text);
+        }
+        await patchArchive(run, { editedText: edited });
+        if (generation === engine.generation) store.set({ editedText: edited, editing: false });
+      } catch (error) {
+        if (generation === engine.generation) {
+          store.set({ editing: false, editError: messageOf(error) });
+        }
+      }
+    }
+
+    async function generateMeetingReport(text, generation, run = engine.run) {
+      const source = String(text ?? '').trim();
+      if (!source) return;
+      store.set({ reporting: true, reportError: '' });
+      try {
+        const han = (source.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
+        const latin = (source.match(/[A-Za-z]/g) ?? []).length;
+        const language = han > 0 && han >= latin * 0.4 ? 'Chinese' : 'English';
+        const send = async (text, mode) => {
+          const body = await request('/report', { json: { text, mode, language, model: run?.model ?? null } });
+          return String(body.report ?? '').trim();
+        };
+        let report;
+        if (source.length <= 12_000) {
+          report = await send(source);
+        } else {
+          let parts = [];
+          for (const chunk of splitText(source, 12_000)) parts.push(await send(chunk, 'part'));
+          while (parts.length > 1) {
+            const merged = [];
+            for (let index = 0; index < parts.length; index += 4) {
+              merged.push(await send(parts.slice(index, index + 4).join('\n\n'), 'merge'));
+            }
+            parts = merged;
+          }
+          [report] = parts;
+        }
+        await patchArchive(run, { report });
+        if (generation === engine.generation) store.set({ report, reporting: false });
+      } catch (error) {
+        if (generation === engine.generation) {
+          store.set({ reporting: false, reportError: messageOf(error) });
+        }
+      }
+    }
+
+    async function begin(inputActions, sessionId, locked, surface = 'composer') {
+      if (locked) return;
+      if (store.get().phase !== 'idle' && store.get().phase !== 'result' && store.get().phase !== 'error') {
+        return;
+      }
+      engine.inputActions = inputActions;
+      engine.sessionId = sessionId;
+      engine.run = null;
+      const run = ++engine.beginSeq;
+      resetSessionState();
+      store.set({ phase: 'requesting', setupOpen: false, surface });
+      let status;
+      try {
+        status = await fetchStatus();
+      } catch (error) {
+        if (run !== engine.beginSeq) return;
+        store.set({ phase: 'error', error: `语音服务不可用：${messageOf(error)}` });
+        return;
+      }
+      if (run !== engine.beginSeq) return;
+      const provider = providerOf(status);
+      if (!provider) {
+        store.set({ phase: 'error', error: '没有可用的语音模型。' });
+        return;
+      }
+      if (!isUsable(provider)) {
+        store.set({
+          phase: 'setup',
+          setupOpen: true,
+          surface,
+          providerId: provider.id,
+          status,
+          prepareError: provider.preparation?.phase === 'failed' ? provider.preparation.message ?? '' : '',
+        });
+        return;
+      }
+      await startCapture(inputActions, sessionId, provider);
+    }
+
+    async function startCapture(inputActions, sessionId, provider) {
+      const generation = ++engine.generation;
+      engine.sessionId = sessionId;
+      engine.inputActions = inputActions;
+      try {
+        engine.insertSpan = inputActions?.captureInsertion?.() ?? null;
+      } catch {
+        engine.insertSpan = null;
+      }
+      engine.abort = new AbortController();
+      engine.level = 0;
+      engine.hasSpeech = false;
+      engine.lastVoiceAt = 0;
+      engine.lastPartialAt = 0;
+      engine.lastLevelUi = 0;
+      engine.partialBusy = false;
+      engine.pcmSamples = 0;
+      engine.segmentSeq = 0;
+      engine.finalChain = Promise.resolve();
+      engine.run = null;
+      const language = store.get().sourceLanguage;
+      const archive = store.get().surface === 'studio' || store.get().dictationHistory;
+      const model = store.get().status?.model ?? null;
+      store.set({ phase: 'requesting', providerId: provider.id, error: '' });
+      let capture;
+      try {
+        capture = await openMicrophone(archive);
+      } catch (error) {
+        if (generation !== engine.generation) return;
+        store.set({ phase: 'error', error: micError(error) });
+        return;
+      }
+      if (generation !== engine.generation) {
+        for (const node of [capture.worklet, capture.processor, capture.source, capture.mute]) node?.disconnect();
+        for (const track of capture.stream.getTracks()) track.stop();
+        return;
+      }
+      engine.capture = capture;
+      try {
+        const recording = archive
+          ? (await request('/recordings/live', {
+              json: { mimeType: capture.mimeType, language, providerId: provider.id },
+            })).recording : null;
+        if (generation !== engine.generation) return;
+        const run = {
+          id: recording?.id ?? null,
+          localTexts: new Map(),
+          language,
+          model,
+          sampleRate: capture.audio.sampleRate,
+          audioQueue: [],
+          audioSequence: 0,
+          segmentWrites: new Set(),
+          segmentFailures: new Map(),
+          translated: '',
+          translationRevision: 0,
+          translateChain: Promise.resolve(),
+          lastCheckpoint: Date.now(),
+          duration: 0,
+          sealed: false,
+        };
+        engine.run = run;
+        engine.segment = newSegment();
+        installProcessor(capture, generation);
+        engine.startedAt = Date.now();
+        if (capture.recorder) {
+          capture.recorder.ondataavailable = ({ data }) => {
+            if (!data?.size) return;
+            const duration = Math.max(0, Math.round((Date.now() - engine.startedAt) / 100) / 10);
+            const partSize = 1024 * 1024;
+            for (let offset = 0; offset < data.size; offset += partSize) {
+              const bytes = data.size > partSize ? data.slice(offset, offset + partSize) : data;
+              run.audioQueue.push({ sequence: run.audioSequence++, bytes, duration });
+            }
+            void pumpAudio(run).catch((error) => noteArchiveError(run, error));
+          };
+          capture.recorder.onerror = () => {
+            store.set({ captureWarning: translate('archive.captureInterrupted') });
+            void finish('interrupted');
+          };
+          try {
+            capture.recorder.start(1000);
+          } catch {
+            capture.recorder = undefined;
+          }
+        }
+        for (const track of capture.stream.getTracks()) {
+          track.addEventListener('ended', () => {
+            if (generation !== engine.generation || store.get().phase !== 'recording') return;
+            store.set({ captureWarning: translate('archive.captureInterrupted') });
+            void finish('interrupted');
+          }, { once: true });
+        }
+        store.set((current) => ({
+          ...current,
+          phase: 'recording', elapsed: 0, level: 0,
+          archiveStage: archive ? '' : 'draft',
+          captureWarning: archive && !capture.recorder ? translate('archive.noRecorder') : '',
+          historyVersion: current.historyVersion + Number(archive),
+        }));
+        startTicker(generation, run);
+      } catch (error) {
+        await closeCapture();
+        if (generation === engine.generation) {
+          store.set({ phase: 'error', error: `无法开始归档：${messageOf(error)}` });
+        }
+      }
+    }
+
+    async function finish(reason) {
+      const state = store.get();
+      const run = engine.run;
+      if (state.phase !== 'recording' || !run) return;
+      const generation = engine.generation;
+      run.interrupted = reason === 'interrupted';
+      run.duration = Math.max(0, (Date.now() - engine.startedAt) / 1000);
+      store.set({ phase: 'finishing', elapsed: run.duration, archiveStage: 'stopping' });
+      clearTimers();
+      const capture = engine.capture;
+      await Promise.all([flushPcm(capture), flushRecorder(capture)]);
+      await closeCapture();
+      if (generation !== engine.generation) return;
+      store.set({ archiveStage: run.id ? 'saving' : 'draft' });
+      finalizeSegment(generation, run);
+      const archive = run.id ? sealArchive(run) : Promise.resolve(null);
+      await engine.finalChain;
+      const saved = await archive;
+      if (generation !== engine.generation) return;
+
+      const current = store.get();
+      const text = current.finalText.trim();
+      const pending = current.pendingSegments;
+      if (run.id) store.set((previous) => ({ ...previous, historyVersion: previous.historyVersion + 1 }));
+      if (text && current.editMode) void generateEditedText(text, generation, run);
+      if (text && state.surface === 'studio' && current.reportMode) {
+        void generateMeetingReport(text, generation, run);
+      }
+      if (state.surface === 'composer' && text && (!run.id || saved) && !pending && !current.captureWarning &&
+          !current.translate && !current.editMode && insertAt(text, engine.insertSpan)) {
+        resetSessionState();
+        const message = translate(run.id ? 'recording.insertedSaved' : 'recording.inserted');
+        store.set({ phase: 'idle', savedNotice: message });
+        flashNotice();
+        return;
+      }
+      store.set({
+        phase: 'result', result: { text },
+        savedNotice: saved ? translate('recording.saved') : '',
+      });
+      if (saved) flashNotice();
+    }
+
+    async function cancel(dispose = false) {
+      if (!dispose && store.get().phase === 'recording') {
+        await finish('stop');
+        return;
+      }
+      if (!dispose && store.get().phase === 'finishing') return;
+      engine.beginSeq += 1;
+      engine.generation += 1;
+      clearTimers();
+      clearPrepareTimer();
+      engine.abort?.abort();
+      await closeCapture();
+      engine.segment = null;
+      engine.partialBusy = false;
+      resetSessionState();
+      store.set({ phase: 'idle', setupOpen: false });
+    }
+
+    function dismissSetup() {
+      clearPrepareTimer();
+      store.set({ setupOpen: false, phase: 'idle' });
+    }
+
+    async function prepare(providerId, downloadSource) {
+      if (!providerId) return;
+      store.set({ preparing: true, prepareError: '' });
+      try {
+        const response = await fetch(`${API}/prepare`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            providerId,
+            ...(downloadSource ? { downloadSource } : {}),
+          }),
+        });
+        await readJsonResponse(response);
+      } catch (error) {
+        store.set({ preparing: false, prepareError: messageOf(error) });
+        return;
+      }
+      clearPrepareTimer();
+      engine.prepareTimer = setInterval(() => {
+        void pollPreparation(providerId);
+      }, 900);
+      void pollPreparation(providerId);
+    }
+
+    async function pollPreparation(providerId) {
+      let status;
+      try {
+        status = await fetchStatus();
+      } catch (error) {
+        store.set({ prepareError: messageOf(error) });
+        return;
+      }
+      const provider = (status.providers ?? []).find((item) => item.id === providerId);
+      const phase = provider?.preparation?.phase;
+      store.set({ status, setupOpen: true, providerId });
+      if (phase === 'ready' || phase === 'standby') {
+        clearPrepareTimer();
+        store.set({
+          preparing: false,
+          phase: 'idle',
+          notice: '',
+          setupOpen: true,
+        });
+      } else if (phase === 'failed') {
+        clearPrepareTimer();
+        store.set({
+          preparing: false,
+          prepareError: provider?.preparation?.message ?? '准备失败',
+        });
+      } else if (phase === 'cancelled') {
+        clearPrepareTimer();
+        store.set({ preparing: false, prepareError: '' });
+      }
+    }
+
+    async function cancelPreparation(providerId) {
+      clearPrepareTimer();
+      store.set({ preparing: false });
+      try {
+        const response = await fetch(`${API}/cancel`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ providerId }),
+        });
+        await readJsonResponse(response);
+      } catch (error) {
+        store.set({ prepareError: messageOf(error) });
+      }
+    }
+
+    function modelKey(model) {
+      return model && typeof model.provider === 'string' && typeof model.model === 'string'
+        ? JSON.stringify([model.provider, model.model]) : '';
+    }
+
+    function activeModel(state) {
+      return engine.run && ['recording', 'finishing', 'result'].includes(state.phase)
+        ? engine.run.model : state.status?.model;
+    }
+
+    function saveModelPreference(patch, enabling) {
+      const state = store.get();
+      const modelPermission = enabling ? modelKey(activeModel(state)) : state.modelPermission;
+      if (enabling && !modelPermission) return false;
+      savePrefs({ ...patch, modelPermission });
+      store.set({ ...patch, modelPermission });
+      return true;
+    }
+
+    function setReportMode(enabled) {
+      saveModelPreference({ reportMode: Boolean(enabled) }, enabled);
+    }
+
+    function setSourceLanguage(code) {
+      const source = SOURCE_LANGUAGES.some(([id]) => id === code) ? code : 'auto';
+      store.set({ sourceLanguage: source });
+      savePrefs({ sourceLanguage: source });
+    }
+
+    function setTargetLanguage(code) {
+      const target = TARGETS.some(([id]) => id === code) ? code : 'off';
+      if (!saveModelPreference({ targetLanguage: target }, target !== 'off')) return;
+      store.set({
+        targetLanguage: target,
+        translate: target !== 'off',
+        translationLabel: targetLabel(target),
+        translationText: '',
+        translateError: '',
+      });
+      const state = store.get();
+      const text = (state.result?.text || state.finalText || '').trim();
+      const run = engine.run;
+      if (run && ['recording', 'finishing', 'result'].includes(state.phase)) {
+        run.translationRevision += 1;
+        run.translated = '';
+        if (shouldTranslate(text, target)) void queueTranslation(text, engine.generation, run, true);
+      }
+    }
+
+    function insertAt(text, span) {
+      const composer = engine.activeComposer;
+      if (!text || !composer?.inputActions?.insertText || composer.sessionId !== engine.sessionId || composer.locked) return false;
+      if (!composer.sessionId && composer.inputActions !== engine.inputActions) return false;
+      const actions = composer.inputActions;
+      try {
+        if (span && actions.insertText(text, span)) return true;
+      } catch {
+        /* fall through to the current caret */
+      }
+      try {
+        if (actions.captureInsertion) {
+          return actions.insertText(text, actions.captureInsertion());
+        }
+      } catch {
+        return false;
+      }
+      return false;
+    }
+
+    function insert(kind) {
+      const state = store.get();
+      const result = state.result;
+      if (!result?.text) return;
+      let text = result.text;
+      if (kind === 'translation') text = state.translationText.trim();
+      if (kind === 'edited') text = state.editedText.trim();
+      if (kind === 'both') {
+        text = state.translationText.trim()
+          ? `${result.text}\n\n${state.translationText.trim()}`
+          : result.text;
+      }
+      if (!text) return;
+      if (insertAt(text, engine.insertSpan)) {
+        resetSessionState();
+        store.set({ phase: 'idle', notice: '已插入草稿' });
+        flashNotice();
+        return;
+      }
+      store.set({ notice: translate('recording.originalDraft') });
+    }
+
+    function flashNotice() {
+      if (engine.noticeTimer) clearTimeout(engine.noticeTimer);
+      engine.noticeTimer = setTimeout(() => {
+        store.set((state) => ({ ...state, savedNotice: '', ...(state.phase === 'idle' ? { notice: '' } : {}) }));
+      }, 4200);
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        store.set({ copied: true });
+        setTimeout(() => store.set({ copied: false }), 1600);
+        return true;
+      } catch {
+        store.set({ notice: '复制失败，请手动选择文字' });
+        return false;
+      }
+    }
+
+    function useStore() {
+      return React.useSyncExternalStore(store.subscribe, store.get, store.get);
+    }
+
+    function formatTime(seconds) {
+      const total = Math.max(0, Math.floor(seconds));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const rest = total % 60;
+      if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+      }
+      return `${minutes}:${String(rest).padStart(2, '0')}`;
+    }
+
+    function formatBytes(value) {
+      if (!Number.isFinite(value) || value <= 0) return '—';
+      if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+      if (value >= 1024 ** 2) return `${Math.round(value / 1024 ** 2)} MB`;
+      return `${Math.round(value / 1024)} KB`;
+    }
+
+    function Icon(props) {
+      const size = props.size ?? 18;
+      const paths = {
+        mic: 'M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v5.5A3.5 3.5 0 0 0 12 15Zm-6-5a6 6 0 0 0 12 0M12 18v3m-3 0h6',
+        stop: 'M7 7h10v10H7z',
+        close: 'M7 7l10 10M17 7L7 17',
+        translate: 'M4 6h9M8.5 6c0 4-2 7-4.5 9m2-5c1.5 2.5 3.5 4 6 5m.5-9 4 10m1.5-4h-7',
+        copy: 'M9 9h8v8H9zM7 15H5V5h10v2',
+        file: 'M7 3h7l4 4v14H7zM14 3v4h4M10 12h6M10 16h6',
+        refresh: 'M4 11a8 8 0 0 1 13.5-4.5L20 9m0 0V4m0 5h-5M20 13a8 8 0 0 1-13.5 4.5L4 15m0 0v5m0-5h5',
+      };
+      return h(
+        'svg',
+        {
+          viewBox: '0 0 24 24',
+          width: size,
+          height: size,
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': 'true',
+        },
+        h('path', { d: paths[props.name] ?? paths.mic }),
+      );
+    }
+
+    function Waveform(props) {
+      const bars = 12;
+      return h(
+        'span',
+        { className: 'vl-wave', 'aria-hidden': 'true' },
+        Array.from({ length: bars }, (_, index) => {
+          const center = 1 - Math.abs(index - (bars - 1) / 2) / ((bars - 1) / 2);
+          const wobble = 0.35 + 0.65 * Math.abs(Math.sin((props.phase ?? 0) + index * 1.7));
+          const height = 3 + props.level * 17 * (0.35 + center * 0.65) * wobble;
+          return h('i', { key: index, style: { height: `${Math.min(20, height)}px` } });
+        }),
+      );
+    }
+
+    function SourceSelect(props) {
+      const t = props.t;
+      const state = useStore();
+      return h(
+        'select',
+        {
+          className: 'vl-select vl-source',
+          title: t('language.hint'),
+          'aria-label': t('language.title'),
+          value: state.sourceLanguage || 'auto',
+          disabled: ['requesting', 'recording', 'finishing'].includes(state.phase),
+          onChange: (event) => setSourceLanguage(event.target.value),
+        },
+        SOURCE_LANGUAGES.map(([id, label]) =>
+          h('option', { key: id, value: id }, id === 'auto' ? t('translate.auto') : label),
+        ),
+      );
+    }
+
+    function modelDisclosure(state, t) {
+      const model = activeModel(state);
+      return model
+        ? t('model.disclose', { provider: [model.provider, model.model].filter(Boolean).join(' / ') })
+        : t('model.unavailable');
+    }
+
+    function EditControl({ t }) {
+      const state = useStore();
+      return h('label', { className: 'vl-check', title: modelDisclosure(state, t) },
+        h('input', {
+          type: 'checkbox',
+          checked: state.editMode,
+          disabled: state.phase === 'finishing' || state.phase === 'result' || (!state.editMode && !activeModel(state)),
+          onChange: (event) => {
+            const editMode = event.target.checked;
+            saveModelPreference({ editMode }, editMode);
+          },
+        }),
+        t('model.edit'),
+      );
+    }
+
+    function stopFeedback(state, t) {
+      const n = state.transcribingSegments;
+      if (state.archiveStage === 'stopping') return t('recording.stopping');
+      if (state.archiveStage === 'failed') return t('recording.saveFailed');
+      if (state.archiveStage === 'saved') {
+        return n ? t('recording.savedProcessing', { n }) : t('recording.saved');
+      }
+      if (state.archiveStage === 'draft') {
+        if (n) return t('recording.processing', { n });
+        return t(state.phase === 'finishing' ? 'recording.finishingDraft' : 'recording.ready');
+      }
+      return t('recording.saving');
+    }
+
+    function ArchiveStatus({ state, t }) {
+      if (!state.captureWarning && !state.pendingSegments && !state.archiveError) return null;
+      const archive = Boolean(engine.run?.id);
+      return h('div', { role: 'status' },
+        state.captureWarning ? h('div', { className: 'vl-note' }, state.captureWarning) : null,
+        state.pendingSegments ? h('div', { className: 'vl-note' },
+          t(archive ? 'archive.pending' : 'archive.localPending', { n: state.pendingSegments })) : null,
+        state.archiveError ? h('div', { className: 'vls-error' }, state.archiveError) : null,
+        state.phase === 'result' && archive && state.archiveError && !engine.run.sealed
+          ? h('button', { type: 'button', className: 'vl-btn', disabled: state.retrySaving, onClick: () => void retryArchive() },
+              t(state.retrySaving ? 'archive.saving' : 'archive.retrySave'))
+          : null,
+        state.phase === 'result' && !archive && state.pendingSegments
+          ? h('button', { type: 'button', className: 'vl-btn', disabled: state.retrySaving, onClick: () => void retryDraftSegments() },
+              state.retrySaving ? t('recording.processing', { n: state.pendingSegments }) : t('archive.retryLocal'))
+          : null,
+      );
+    }
+
+    function DictationPreferences({ state, t }) {
+      return h('details', { className: 'vls-options' },
+        h('summary', null, t('recording.dictationSettings')),
+        h('div', { className: 'vls-options-row' },
+          h('label', { className: 'vl-check', title: t('recording.dictationHint') },
+            h('input', {
+              type: 'checkbox', checked: state.dictationHistory,
+              onChange: (event) => {
+                const dictationHistory = event.target.checked;
+                store.set({ dictationHistory });
+                savePrefs({ dictationHistory });
+              },
+            }),
+            t('recording.dictationHistory'),
+          ),
+          h('label', { className: 'vls-lang', title: t('shortcut.hint') },
+            t('shortcut.label'),
+            h('select', {
+              className: 'vl-select', value: state.shortcut,
+              onChange: (event) => {
+                const shortcut = event.target.value;
+                store.set({ shortcut });
+                savePrefs({ shortcut });
+              },
+            }, SHORTCUTS.map(([code, label]) => h('option', { key: code, value: code }, code === 'off' ? t(label) : label))),
+          ),
+        ),
+        h('p', { className: 'vl-note' }, t('recording.dictationHint'), ' ', t('shortcut.hint')),
+      );
+    }
+
+    function EditedText({ state, t }) {
+      if (!state.editing && !state.editedText && !state.editError) return null;
+      return h('div', { className: 'vls-live-translation' },
+        h('div', { className: 'vl-label' }, t('model.edited')),
+        state.editing ? h('p', { className: 'vl-note' }, t('model.editing')) : null,
+        state.editedText ? h('p', { className: 'vls-trans-text' }, state.editedText) : null,
+        state.editError ? h('p', { className: 'vls-error' }, t('model.editError', { message: state.editError })) : null,
+      );
+    }
+
+    function TranslateControl(props) {
+      const t = props.t;
+      const state = useStore();
+      const enabled = state.targetLanguage !== 'off';
+      return h(
+        'span',
+        { className: 'vl-translate-control' },
+        h(
+          'label',
+          { className: 'vl-check', title: modelDisclosure(state, t) },
+          h('input', {
+            type: 'checkbox',
+            checked: enabled,
+            disabled: !enabled && !activeModel(state),
+            onChange: (event) => {
+              if (!event.target.checked) {
+                setTargetLanguage('off');
+                return;
+              }
+              const source = state.sourceLanguage;
+              const target = source === 'zh' || source === 'yue' ? 'en' : source === 'en' ? 'zh' : 'en';
+              setTargetLanguage(target);
+            },
+          }),
+          t('translate.enable'),
+        ),
+        enabled ? h(TargetSelect, { t }) : null,
+      );
+    }
+
+    function TargetSelect(props) {
+      const t = props.t;
+      const state = useStore();
+      return h(
+        'select',
+        {
+          className: 'vl-select vl-target',
+          title: t('translate.title'),
+          'aria-label': t('translate.title'),
+          value: state.targetLanguage || 'off',
+          onChange: (event) => setTargetLanguage(event.target.value),
+        },
+        TARGETS.map(([id, label]) =>
+          h('option', { key: id, value: id }, id === 'off' ? t('translate.off') : label),
+        ),
+      );
+    }
+
+    function VoiceBar(props) {
+      const state = useStore();
+      const t = props.t;
+      const active =
+        state.surface === 'composer' &&
+        (state.phase === 'requesting' ||
+          state.phase === 'recording' ||
+          state.phase === 'finishing');
+      React.useLayoutEffect(() => {
+        const composer = { sessionId: props.sessionId, inputActions: props.inputActions, locked: props.locked };
+        engine.activeComposer = composer;
+        return () => {
+          if (engine.activeComposer === composer) engine.activeComposer = null;
+        };
+      }, [props.sessionId, props.inputActions, props.locked]);
+
+      React.useLayoutEffect(() => {
+        props.onActiveChange(active);
+        return () => props.onActiveChange(false);
+      }, [active, props.onActiveChange]);
+
+      React.useEffect(
+        () => () => {
+          const current = store.get();
+          if (current.surface === 'composer' && current.phase === 'requesting') {
+            void cancel();
+          }
+        },
+        [],
+      );
+
+      React.useEffect(() => {
+        const onKey = (event) => {
+          if (event.key !== 'Escape') return;
+          if (
+            store.get().surface === 'composer' &&
+            (store.get().phase === 'recording' || store.get().phase === 'requesting')
+          ) {
+            event.preventDefault();
+            void cancel();
+          } else if (store.get().phase === 'setup' && store.get().setupOpen) {
+            event.preventDefault();
+            dismissSetup();
+          }
+        };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+      }, []);
+
+      const phase = state.phase;
+      if (state.surface === 'studio' && phase !== 'idle') return null;
+
+      if (phase === 'idle') {
+        return h(
+          'div',
+          { className: 'vl-root' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vl-trigger',
+              title: [t('dictate'), !state.dictationHistory ? t('recording.draft') : null,
+                SHORTCUTS.find(([code]) => code === state.shortcut && code !== 'off')?.[1]].filter(Boolean).join(' · '),
+              'aria-label': t('dictate'),
+              disabled: props.locked,
+              onMouseDown: (event) => event.preventDefault(),
+              onClick: () => {
+                ensureAudio();
+                void begin(props.inputActions, props.sessionId, props.locked);
+              },
+            },
+            h(Icon, { name: 'mic', size: 17 }),
+          ),
+          state.notice
+            ? h('span', { className: 'vl-status', style: { marginLeft: '6px' } }, state.notice)
+            : null,
+        );
+      }
+
+      if (phase === 'requesting') {
+        return h(
+          'div',
+          { className: 'vl-root' },
+          h(
+            'div',
+            { className: 'vl-bar' },
+            h('span', { className: 'vl-spin' }),
+            h('span', { className: 'vl-status' }, h('span', null, t('phase.requesting'))),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-round',
+                title: t('bar.cancel'),
+                'aria-label': t('bar.cancel'),
+                onClick: () => void cancel(),
+              },
+              h(Icon, { name: 'close', size: 14 }),
+            ),
+          ),
+        );
+      }
+
+      if (phase === 'recording') {
+        return h(
+          'div',
+          { className: 'vl-root' },
+          h(
+            'div',
+            { className: 'vl-bar' },
+            h('span', { className: 'vl-pulse' }),
+            h(Waveform, { level: state.level, phase: state.elapsed }),
+            h('span', { className: 'vl-timer' }, formatTime(state.elapsed)),
+            h(SourceSelect, { t }),
+            h(TranslateControl, { t }),
+            h('span', { className: 'vl-sep' }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-round',
+                'data-danger': 'true',
+                title: t('bar.stop'),
+                'aria-label': t('bar.stop'),
+                onClick: () => void finish('stop'),
+              },
+              h(Icon, { name: 'stop', size: 13 }),
+            ),
+          ),
+        );
+      }
+
+      if (phase === 'finishing') {
+        return h(
+          'div',
+          { className: 'vl-root' },
+          h(
+            'div',
+            { className: 'vl-bar' },
+            h('span', { className: 'vl-spin' }),
+            h('span', { className: 'vl-status' }, h('span', null, stopFeedback(state, t))),
+          ),
+        );
+      }
+
+      // setup / result / error: a compact retry trigger with a close affordance.
+      return h(
+        'div',
+        { className: 'vl-root' },
+        h(
+          'div',
+          { className: 'vl-bar' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vl-trigger',
+              title: t('bar.retry'),
+              'aria-label': t('bar.retry'),
+              onMouseDown: (event) => event.preventDefault(),
+              onClick: () => {
+                if (state.phase === 'result' || state.phase === 'error') {
+                  resetSessionState();
+                  store.set({ phase: 'idle' });
+                } else {
+                  void begin(props.inputActions, props.sessionId, props.locked);
+                }
+              },
+            },
+            h(Icon, { name: 'mic', size: 17 }),
+          ),
+          h('span', { className: 'vl-status' }, h('span', null, state.notice || '')),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vl-round',
+              title: t('bar.close'),
+              'aria-label': t('bar.close'),
+              onClick: () => {
+                if (state.phase === 'setup') dismissSetup();
+                else {
+                  resetSessionState();
+                  store.set({ phase: 'idle' });
+                }
+              },
+            },
+            h(Icon, { name: 'close', size: 14 }),
+          ),
+        ),
+      );
+    }
+
+    function LivePanel(props) {
+      const state = useStore();
+      const t = props.t;
+      if (state.phase !== 'recording' && state.phase !== 'finishing') return null;
+      const original = state.finalText;
+      const partial = state.partialText;
+      const empty = !original && !partial;
+      return h(
+        'div',
+        { className: 'vl-overlay' },
+        h(
+          'div',
+          { className: 'vl-panel', role: 'status', 'aria-live': 'polite' },
+          h(
+            'div',
+            { className: 'vl-head' },
+            state.phase === 'recording' ? h('span', { className: 'vl-pulse' }) : h('span', { className: 'vl-spin' }),
+            h('span', { className: 'vl-title' }, state.phase === 'recording' ? t('phase.recording') : stopFeedback(state, t)),
+            h('span', { className: 'vl-sub' }, formatTime(state.elapsed)),
+            h('span', { className: 'vl-sep' }),
+            h(TranslateControl, { t }),
+            h(EditControl, { t }),
+          ),
+          h(
+            'div',
+            { className: 'vl-body' },
+            h(
+              'p',
+              { className: 'vl-text', 'data-empty': empty },
+              original,
+              partial
+                ? h('span', { className: 'vl-partial' }, original ? ` ${partial}` : partial)
+                : null,
+              empty ? t('live.empty') : null,
+            ),
+            state.translate
+              ? h(
+                  'div',
+                  { className: 'vl-translation' },
+                  h(
+                    'div',
+                    { className: 'vl-label' },
+                    t('live.translation'),
+                    h('b', null, state.translationLabel || '译'),
+                  ),
+                  state.translationText
+                    ? h(
+                        'p',
+                        { className: 'vl-translation-text' },
+                        state.translationText,
+                      )
+                    : h(
+                        'p',
+                        { className: 'vl-note' },
+                        state.translating ? t('live.translating') : t('bar.translateOn'),
+                      ),
+                  state.translateError ? h('p', { className: 'vl-note', 'data-tone': 'error' }, state.translateError) : null,
+                )
+              : null,
+          ),
+          h(ArchiveStatus, { state, t }),
+          h('div', { className: 'vl-note' }, state.translate || state.editMode ? modelDisclosure(state, t) : t('live.hint')),
+        ),
+      );
+    }
+
+    function ResultPanel(props) {
+      const state = useStore();
+      const t = props.t;
+      if (state.phase !== 'result') return null;
+      const result = state.result ?? { text: '' };
+      const hasText = Boolean(result.text);
+      const translation = state.translationText.trim();
+      return h(
+        'div',
+        { className: 'vl-overlay' },
+        h(
+          'div',
+          { className: 'vl-panel', role: 'dialog', 'aria-label': t('result.title') },
+          h(
+            'div',
+            { className: 'vl-head' },
+            h('span', { className: 'vl-title' }, t('result.title')),
+            h('span', { className: 'vl-sub' }, formatTime(state.elapsed)),
+            h('span', { className: 'vl-sep' }),
+            h(TranslateControl, { t }),
+          ),
+          h(
+            'div',
+            { className: 'vl-body' },
+            hasText
+              ? h('p', { className: 'vl-text' }, result.text)
+              : h('p', { className: 'vl-text', 'data-empty': 'true' }, t('result.empty')),
+            h(EditedText, { state, t }),
+            h(ArchiveStatus, { state, t }),
+            state.notice ? h('p', { className: 'vl-note', role: 'status' }, state.notice) : null,
+            state.translate ? h('div', { className: 'vl-note' }, modelDisclosure(state, t)) : null,
+            state.translate
+              ? h(
+                  'div',
+                  { className: 'vl-translation' },
+                  h(
+                    'div',
+                    { className: 'vl-label' },
+                    t('live.translation'),
+                    h('b', null, state.translationLabel || '译'),
+                  ),
+                  translation
+                    ? h('p', { className: 'vl-translation-text' }, translation)
+                    : h(
+                        'p',
+                        { className: 'vl-note' },
+                        state.translating ? t('live.translating') : t('bar.translateOn'),
+                      ),
+                  state.translateError ? h('p', { className: 'vl-note', 'data-tone': 'error' }, state.translateError) : null,
+                )
+              : null,
+          ),
+          h(
+            'div',
+            { className: 'vl-actions' },
+            hasText
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vl-btn',
+                    'data-primary': 'true',
+                    onClick: () => insert('original'),
+                  },
+                  t('result.insert'),
+                )
+              : null,
+            state.editedText
+              ? h('button', { type: 'button', className: 'vl-btn', onClick: () => insert('edited') }, t('result.insertEdited'))
+              : null,
+            hasText && translation
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vl-btn',
+                    onClick: () => insert('translation'),
+                  },
+                  t('result.insertTranslation'),
+                )
+              : null,
+            hasText && translation
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vl-btn',
+                    onClick: () => insert('both'),
+                  },
+                  t('result.insertBoth'),
+                )
+              : null,
+            hasText
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vl-btn',
+                    'data-quiet': 'true',
+                    onClick: () => void copyText(result.text),
+                  },
+                  state.copied ? t('result.copied') : t('result.copy'),
+                )
+              : null,
+            h('span', { className: 'vl-grow' }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-btn',
+                'data-quiet': 'true',
+                onClick: () => {
+                  resetSessionState();
+                  store.set({ phase: 'idle' });
+                },
+              },
+              t('result.discard'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    function SetupPanel(props) {
+      const state = useStore();
+      const t = props.t;
+      if (state.phase !== 'setup' || !state.setupOpen) return null;
+      const provider = (state.status?.providers ?? []).find((item) => item.id === state.providerId);
+      const preparation = provider?.preparation ?? {};
+      const phase = preparation.phase ?? 'unprepared';
+      const sources = Array.isArray(provider?.downloadSources) ? provider.downloadSources : [];
+      const estimate = provider?.setupEstimate?.recommendedDiskBytes;
+      const total = Number(preparation.totalBytes ?? 0);
+      const done = Number(preparation.completedBytes ?? 0);
+      const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      const step = preparation.step ?? 'check';
+      const ready = phase === 'ready' || phase === 'standby';
+      const failed = phase === 'failed';
+      const running =
+        state.preparing ||
+        phase === 'checking' ||
+        phase === 'downloading' ||
+        phase === 'loading' ||
+        phase === 'cancelling';
+      return h(
+        'div',
+        { className: 'vl-overlay' },
+        h(
+          'div',
+          { className: 'vl-panel', role: 'dialog', 'aria-label': t('setup.title') },
+          h(
+            'div',
+            { className: 'vl-head' },
+            h('span', { className: 'vl-title' }, t('setup.title')),
+            h('span', { className: 'vl-sep' }),
+            state.notice ? h('span', { className: 'vl-sub' }, state.notice) : null,
+          ),
+          h(
+            'p',
+            { className: 'vl-note' },
+            ready ? t('setup.ready') : t('setup.body', { size: formatBytes(estimate || 260 * 1024 * 1024) }),
+          ),
+          running
+            ? h(
+                'div',
+                null,
+                h(
+                  'div',
+                  { className: 'vl-row', style: { justifyContent: 'space-between' } },
+                  h('span', { className: 'vl-note' }, t(`setup.step.${step}`)),
+                  h(
+                    'span',
+                    { className: 'vl-sub' },
+                    total > 0 ? `${formatBytes(done)} / ${formatBytes(total)} · ${percent}%` : t('setup.preparing'),
+                  ),
+                ),
+                h(
+                  'div',
+                  {
+                    className: 'vl-progress',
+                    'data-indeterminate': total > 0 ? 'false' : 'true',
+                    style: { marginTop: '6px' },
+                  },
+                  h('i', { style: { width: `${percent}%` } }),
+                ),
+              )
+            : null,
+          failed
+            ? h('p', { className: 'vl-note', 'data-tone': 'error' }, t('setup.failed', { message: preparation.message ?? state.prepareError ?? '' }))
+            : null,
+          state.prepareError && !failed
+            ? h('p', { className: 'vl-note', 'data-tone': 'error' }, state.prepareError)
+            : null,
+          !running && !ready && sources.length > 0
+            ? h(
+                'div',
+                { className: 'vl-row' },
+                h('span', { className: 'vl-note' }, t('setup.source')),
+                h(
+                  'select',
+                  {
+                    className: 'vl-select',
+                    value: state.downloadSource,
+                    onChange: (event) => store.set({ downloadSource: event.target.value }),
+                  },
+                  h('option', { value: '' }, t('setup.sourceAuto')),
+                  sources.map((source) =>
+                    h('option', { key: source, value: source }, source.replace(/^https?:\/\//, '')),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'vl-actions' },
+            ready
+              ? h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vl-btn',
+                    'data-primary': 'true',
+                    onClick: () => {
+                      ensureAudio();
+                      store.set({ phase: 'idle', setupOpen: false, notice: '' });
+                      void begin(engine.inputActions, engine.sessionId, false);
+                    },
+                  },
+                  t('setup.start'),
+                )
+              : running
+                ? h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'vl-btn',
+                      onClick: () => void cancelPreparation(state.providerId),
+                    },
+                    t('setup.cancel'),
+                  )
+                : h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'vl-btn',
+                      'data-primary': 'true',
+                      onClick: () => void prepare(state.providerId, state.downloadSource),
+                    },
+                    failed ? t('setup.retry') : t('setup.download'),
+                  ),
+            h('span', { className: 'vl-grow' }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-btn',
+                'data-quiet': 'true',
+                onClick: dismissSetup,
+              },
+              t('setup.later'),
+            ),
+          ),
+          h('div', { className: 'vl-note' }, t('setup.disk', { size: formatBytes(estimate || 260 * 1024 * 1024) })),
+        ),
+      );
+    }
+
+    function ErrorPanel(props) {
+      const state = useStore();
+      const t = props.t;
+      if (state.phase !== 'error') return null;
+      const key = `error.${state.error}`;
+      const translated = t(key);
+      const text = translated && translated !== key ? translated : state.error;
+      return h(
+        'div',
+        { className: 'vl-overlay' },
+        h(
+          'div',
+          { className: 'vl-panel', role: 'alertdialog', 'aria-label': t('error.title') },
+          h('div', { className: 'vl-head' }, h('span', { className: 'vl-title' }, t('error.title'))),
+          h('p', { className: 'vl-note', 'data-tone': 'error' }, text),
+          h(
+            'div',
+            { className: 'vl-actions' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-btn',
+                'data-primary': 'true',
+                onClick: () => {
+                  ensureAudio();
+                  store.set({ phase: 'idle', error: '' });
+                  void begin(engine.inputActions, engine.sessionId, false);
+                },
+              },
+              t('error.retry'),
+            ),
+            h('span', { className: 'vl-grow' }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vl-btn',
+                'data-quiet': 'true',
+                onClick: () => {
+                  resetSessionState();
+                  store.set({ phase: 'idle' });
+                },
+              },
+              t('error.close'),
+            ),
+          ),
+        ),
+      );
+    }
+
+    function formatDate(ms) {
+      const value = Number(ms);
+      if (!Number.isFinite(value) || value <= 0) return '';
+      try {
+        return new Intl.DateTimeFormat(undefined, {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date(value));
+      } catch {
+        return new Date(value).toLocaleString();
+      }
+    }
+
+    function PanelIcon(props) {
+      const size = props?.size || 18;
+      const active = Boolean(props?.active);
+      return h(
+        'svg',
+        {
+          viewBox: '0 0 24 24',
+          width: size,
+          height: size,
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: 1.7,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': 'true',
+          style: { display: 'block', color: active ? 'var(--dsw-alias-brand-primary)' : 'currentColor' },
+        },
+        h('rect', { x: 9, y: 2.5, width: 6, height: 11, rx: 3 }),
+        h('path', { d: 'M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6' }),
+        h('path', { d: 'M3.5 7v3M20.5 7v3' }),
+      );
+    }
+
+    function StudioTranslation(props) {
+      const t = props.t;
+      const state = props.state;
+      const live = state.translationText;
+      return h(
+        'div',
+        { className: 'vls-live-translation' },
+        h(
+          'div',
+          { className: 'vl-label' },
+          t('live.translation'),
+          h('b', null, state.translationLabel || '译'),
+        ),
+        live
+          ? h('p', { className: 'vls-trans-text' }, live)
+          : h(
+              'p',
+              { className: 'vl-note' },
+              state.translating ? t('live.translating') : t('bar.translateOn'),
+            ),
+        state.translateError ? h('p', { className: 'vls-error' }, state.translateError) : null,
+      );
+    }
+
+    function highlighted(text, term) {
+      const clean = term.trim();
+      if (!text || !clean) return text;
+      const lower = text.toLowerCase();
+      const needle = clean.toLowerCase();
+      const content = [];
+      let from = 0;
+      let at = lower.indexOf(needle);
+      while (at !== -1) {
+        content.push(text.slice(from, at), h('mark', { key: at }, text.slice(at, at + needle.length)));
+        from = at + needle.length;
+        at = lower.indexOf(needle, from);
+      }
+      content.push(text.slice(from));
+      return content;
+    }
+
+    function segmentAtTime(segments, seconds) {
+      return segments?.find((part) => seconds >= part.start && seconds < part.end)?.sequence ?? null;
+    }
+
+    function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem }) {
+      const [details, setDetails] = React.useState(null);
+      const [expanded, setExpanded] = React.useState(false);
+      const [busy, setBusy] = React.useState('');
+      const [error, setError] = React.useState('');
+      const [rename, setRename] = React.useState(false);
+      const [title, setTitle] = React.useState(item.title);
+      const [playingPart, setPlayingPart] = React.useState(null);
+      const [jump, setJump] = React.useState(null);
+      const [editing, setEditing] = React.useState(null);
+      const [correction, setCorrection] = React.useState('');
+      const audioRef = React.useRef(null);
+      const segmentList = React.useRef(null);
+      const path = `/recordings/${item.id}`;
+      const text = details?.text ?? item.text;
+      const term = query.trim().toLowerCase();
+      const segmentMatches = (part) => Boolean(term &&
+        [part.text, part.correction].some((value) => value?.toLowerCase().includes(term)));
+
+      React.useEffect(() => {
+        if (!expanded) return;
+        let active = true;
+        fetch(`${API}${path}`, { cache: 'no-store' })
+          .then(readJsonResponse)
+          .then((body) => { if (active) setDetails(body.recording); })
+          .catch((failure) => { if (active) setError(messageOf(failure)); });
+        return () => { active = false; };
+      }, [expanded, path, item.status, item.segmentCount, item.pendingCount, item.hasMore, item.hasCorrections]);
+
+      React.useEffect(() => {
+        if (!jump || jump.term !== term || !expanded || !details?.segments || !segmentList.current) return;
+        const matches = details.segments.filter(segmentMatches);
+        const part = matches.length ? matches[jump.index % matches.length] : undefined;
+        const row = part && segmentList.current.querySelector(`[data-sequence="${part.sequence}"]`);
+        row?.scrollIntoView({ block: 'nearest' });
+        row?.focus({ preventScroll: true });
+      }, [jump, term, expanded, details]);
+
+      function syncPlayback(audio = audioRef.current) {
+        if (!audio) return;
+        setPlayingPart(segmentAtTime(details?.segments, audio.currentTime));
+      }
+
+      React.useEffect(() => { syncPlayback(); }, [details]);
+
+      function locateMatch() {
+        setError('');
+        setExpanded(true);
+        setJump((previous) => ({ term, index: previous?.term === term ? previous.index + 1 : 0 }));
+      }
+
+      async function run(key, work) {
+        setBusy(key);
+        setError('');
+        try {
+          await work();
+        } catch (failure) {
+          setError(messageOf(failure));
+        } finally {
+          setBusy('');
+        }
+      }
+
+      async function copyOriginal() {
+        if (details || !item.hasMore) {
+          await copy(text, item.id);
+          return;
+        }
+        const { recording } = await readJsonResponse(await fetch(`${API}${path}`, { cache: 'no-store' }));
+        await copy(recording.text, item.id);
+      }
+
+      async function retry(part) {
+        const result = await request(`${path}/segments/${part.sequence}/retry`);
+        setDetails(result.recording);
+        onChanged();
+        if (result.segment.state !== 'ready') throw new Error(result.segment.error || t('archive.segmentFailed'));
+      }
+
+      async function renameRecording(event) {
+        event.preventDefault();
+        if (!title.trim()) return;
+        await run('rename', async () => {
+          const { recording } = await request(path, { method: 'PATCH', json: { title } });
+          setDetails(recording);
+          setRename(false);
+          onChanged();
+        });
+      }
+
+      function startCorrection(key, value) {
+        setEditing(key);
+        setCorrection(value);
+      }
+
+      async function saveCorrection(key, value) {
+        await run('correction', async () => {
+          const target = key === 'whole' ? path : `${path}/segments/${key}`;
+          const { recording } = await request(target, { method: 'PATCH', json: { correction: value } });
+          setDetails(recording);
+          setEditing(null);
+          onChanged();
+        });
+      }
+
+      function correctionControls(key, raw, corrected) {
+        if (editing !== key) {
+          return h('button', { type: 'button', className: 'vls-mini', disabled: editing !== null || !!busy,
+            onClick: () => startCorrection(key, corrected ?? raw) }, t('history.correct'));
+        }
+        return h('form', { className: 'vls-correct', onSubmit: (event) => {
+          event.preventDefault();
+          void saveCorrection(key, correction);
+        } },
+          h('textarea', { className: 'vls-input', value: correction, 'aria-label': t('history.correction'),
+            maxLength: key === 'whole' ? 200_000 : 20_000, rows: 3,
+            onChange: (event) => setCorrection(event.target.value) }),
+          h('div', { className: 'vls-item-actions' },
+            h('button', { type: 'submit', className: 'vls-mini', disabled: !!busy }, t('history.save')),
+            corrected !== undefined ? h('button', { type: 'button', className: 'vls-mini', disabled: !!busy,
+              onClick: () => void saveCorrection(key, null) }, t('history.restore')) : null,
+            h('button', { type: 'button', className: 'vls-mini', disabled: !!busy,
+              onClick: () => setEditing(null) }, t('studio.cancel')),
+          ),
+        );
+      }
+
+      function seek(seconds) {
+        const audio = audioRef.current;
+        if (!audio) return;
+        setError('');
+        try {
+          audio.currentTime = seconds;
+          syncPlayback(audio);
+          void audio.play().catch((failure) => setError(messageOf(failure)));
+        } catch (failure) {
+          setError(messageOf(failure));
+        }
+      }
+
+      const active = item.status === 'recording';
+      const hasDetails = Boolean(text || item.hasMore || item.segmentCount > 0 || item.hasCorrections);
+      const derived = (value, label) => value
+        ? h('details', { className: 'vls-report-block' },
+            h('summary', { className: 'vls-report-summary' }, label),
+            h('div', { className: 'vls-report-text' }, value),
+            h('button', { type: 'button', className: 'vl-btn', onClick: () => void copy(value, `${item.id}:${label}`) },
+              copiedId === `${item.id}:${label}` ? t('studio.copied') : t('result.copy')),
+          )
+        : null;
+      return h('li', { className: 'vls-item' },
+        h('div', { className: 'vls-item-head' },
+          h('span', { className: 'vls-item-title', title: item.title }, highlighted(item.title, query) || t('studio.noText')),
+          h('span', null, formatDate(item.createdAt)),
+          h('span', null, formatTime(item.duration)),
+          h('span', null, item.size ? formatBytes(item.size) : t('studio.noAudio')),
+          h('div', { className: 'vls-item-actions' },
+            h('button', { type: 'button', className: 'vls-mini', disabled: !text || !!busy,
+              onClick: () => void run('copy', copyOriginal) }, copiedId === item.id ? t('studio.copied') : t('studio.copy')),
+            item.downloadUrl && !active
+              ? h('a', { className: 'vls-mini', href: item.downloadUrl, download: true }, t('studio.download')) : null,
+            h('button', { type: 'button', className: 'vls-mini', disabled: active || !!busy,
+              onClick: () => { setTitle(item.title); setRename(true); } }, t('history.rename')),
+            h('button', { type: 'button', className: 'vls-mini', 'data-danger': 'true', disabled: active || !!busy,
+              onClick: () => void removeItem(item) }, t('studio.delete')),
+          ),
+        ),
+        rename ? h('form', { className: 'vls-item-head', onSubmit: renameRecording },
+          h('input', { className: 'vls-input', 'aria-label': t('history.title'), value: title, required: true,
+            maxLength: 120, onChange: (event) => setTitle(event.target.value) }),
+          h('button', { type: 'submit', className: 'vls-mini', disabled: !!busy || !title.trim() }, t('history.save')),
+          h('button', { type: 'button', className: 'vls-mini', disabled: !!busy, onClick: () => setRename(false) }, t('studio.cancel')),
+        ) : null,
+        active ? h('p', { className: 'vl-note' }, t('history.active')) : null,
+        item.status === 'interrupted' ? h('p', { className: 'vl-note' }, t('history.interrupted')) : null,
+        item.pendingCount ? h('p', { className: 'vl-note' }, t('history.pending', { n: item.pendingCount })) : null,
+        error ? h('p', { className: 'vls-error', role: 'status' }, error) : null,
+        !expanded || !details?.segments?.length
+          ? h('p', { className: 'vls-item-text', 'data-open': expanded ? 'true' : 'false' }, highlighted(text, query) || t('studio.noText')) : null,
+        hasDetails ? h('button', { type: 'button', className: 'vls-more', 'aria-expanded': expanded,
+          onClick: () => { setError(''); setJump(null); setExpanded(!expanded); } }, t(expanded ? 'studio.collapse' : item.segmentCount ? 'history.details' : 'history.fullText')) : null,
+        item.matchingSegments > 0 && term
+          ? h('button', { type: 'button', className: 'vls-mini', onClick: locateMatch },
+              t(jump?.term === term && item.matchingSegments > 1 ? 'history.nextMatch' : 'history.jump'))
+          : null,
+        item.audioUrl && !active ? h('audio', { className: 'vls-audio', controls: true, preload: 'none',
+          src: item.audioUrl, ref: audioRef,
+          onTimeUpdate: (event) => syncPlayback(event.currentTarget),
+          onSeeking: (event) => syncPlayback(event.currentTarget),
+          onPlay: (event) => syncPlayback(event.currentTarget),
+        }) : null,
+        expanded && !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
+        expanded && details?.segments?.length
+          ? h('ol', { className: 'vls-segments', ref: segmentList }, details.segments.map((part) =>
+              h('li', {
+                key: part.sequence, className: 'vls-segment', tabIndex: -1,
+                'data-sequence': part.sequence, 'aria-current': playingPart === part.sequence ? 'true' : undefined,
+              },
+                item.audioUrl && !active
+                  ? h('button', { type: 'button', className: 'vls-mini vls-seek', onClick: () => seek(part.start) },
+                      `${formatTime(part.start)}–${formatTime(part.end)}`)
+                  : h('time', null, `${formatTime(part.start)}–${formatTime(part.end)}`),
+                part.state !== 'ready' && !active
+                  ? h('button', { type: 'button', className: 'vls-mini', title: part.error, disabled: !!busy,
+                      onClick: () => void run(String(part.sequence), () => retry(part)) },
+                      busy === String(part.sequence) ? t('history.retrying') : t('history.retrySegment'))
+                  : null,
+                h('div', { className: 'vls-segment-text' },
+                  part.state === 'ready'
+                    ? highlighted(part.correction ?? part.text, query) || t('history.emptySegment')
+                    : part.error || '',
+                  part.correction !== undefined
+                    ? h('details', null, h('summary', null, t('history.original')), highlighted(part.text, query)) : null,
+                ),
+                part.state === 'ready' && !active ? correctionControls(part.sequence, part.text || '', part.correction) : null,
+              ),
+            )) : null,
+        expanded && details && !details.segments && !active
+          ? h('div', null,
+            details.hasCorrections ? h('p', { className: 'vls-item-text', 'data-open': 'true' },
+              t('history.correction'), ' · ', highlighted(details.correctedText, query)) : null,
+            correctionControls('whole', details.text || '', details.correctedText),
+          ) : null,
+        expanded && details && !active && (text || details.hasCorrections)
+          ? h('div', { className: 'vls-item-actions' },
+            text ? h('a', { className: 'vls-mini', download: true,
+              href: `${API}${path}/transcript?variant=original` }, t('history.exportOriginal')) : null,
+            details.hasCorrections ? h('a', { className: 'vls-mini', download: true,
+              href: `${API}${path}/transcript?variant=corrected` }, t('history.exportCorrected')) : null,
+          ) : null,
+        expanded && details?.derivedStale ? h('p', { className: 'vl-note' }, t('history.derivedStale')) : null,
+        expanded ? derived(details?.editedText, t('model.edited')) : null,
+        expanded ? derived(details?.translation, t('live.translation')) : null,
+        expanded ? derived(details?.report, t('studio.report')) : null,
+      );
+    }
+
+    function Studio(props) {
+      const t = translate;
+      const state = useStore();
+      const [history, setHistory] = React.useState({
+        loading: true,
+        items: [],
+        error: '',
+        root: '', total: 0, nextOffset: null,
+      });
+      const [reload, setReload] = React.useState(0);
+      const [query, setQuery] = React.useState('');
+      const [offset, setOffset] = React.useState(0);
+      const [copiedId, setCopiedId] = React.useState('');
+      const [actionError, setActionError] = React.useState('');
+
+      React.useEffect(() => {
+        void fetchStatus().catch(() => {});
+      }, []);
+
+      React.useEffect(
+        () => () => {
+          const current = store.get();
+          if (current.surface !== 'studio') return;
+          if (current.phase === 'recording' || current.phase === 'finishing') {
+            return;
+          } else if (current.phase === 'requesting') {
+            void cancel();
+          } else if (current.phase === 'setup') {
+            dismissSetup();
+          } else if (current.phase === 'result' || current.phase === 'error') {
+            resetSessionState();
+            store.set({ phase: 'idle' });
+          }
+        },
+        [],
+      );
+
+      React.useEffect(() => {
+        const controller = new AbortController();
+        const parameters = new URLSearchParams({ q: query.trim(), limit: '25', offset: String(offset) });
+        const timer = setTimeout(() => {
+          fetch(`${API}/recordings?${parameters}`, { cache: 'no-store', signal: controller.signal })
+            .then(readJsonResponse)
+            .then((body) => {
+              if (controller.signal.aborted) return;
+              setHistory({
+                loading: false,
+                items: Array.isArray(body.recordings) ? body.recordings : [],
+                error: '',
+                root: body.root || '',
+                total: body.total || 0,
+                nextOffset: body.nextOffset,
+                query: query.trim(),
+              });
+            })
+            .catch((error) => {
+              if (controller.signal.aborted) return;
+              setHistory((previous) => ({
+                ...previous,
+                loading: false,
+                error: messageOf(error),
+              }));
+            });
+        }, 160);
+        return () => {
+          clearTimeout(timer);
+          controller.abort();
+        };
+      }, [state.historyVersion, reload, query, offset]);
+
+      const hasActive = history.items.some((item) => item.status === 'recording');
+      React.useEffect(() => {
+        if (!hasActive) return;
+        const timer = setInterval(() => setReload((value) => value + 1), 5000);
+        return () => clearInterval(timer);
+      }, [hasActive]);
+
+      const phase = state.phase;
+      const recording = phase === 'recording';
+      const requesting = phase === 'requesting';
+      const finishing = phase === 'finishing';
+      const provider = providerOf(state.status);
+      const preparation = provider?.preparation ?? {};
+      const preparationPhase = preparation.phase ?? 'unprepared';
+      const ready = preparationPhase === 'ready' || preparationPhase === 'standby';
+      const running =
+        state.preparing ||
+        preparationPhase === 'checking' ||
+        preparationPhase === 'downloading' ||
+        preparationPhase === 'loading' ||
+        preparationPhase === 'cancelling';
+      const failed = preparationPhase === 'failed';
+      const sources = Array.isArray(provider?.downloadSources) ? provider.downloadSources : [];
+      const estimate = provider?.setupEstimate?.recommendedDiskBytes;
+      const total = Number(preparation.totalBytes ?? 0);
+      const done = Number(preparation.completedBytes ?? 0);
+      const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+      const step = preparation.step ?? 'check';
+      const modelText = state.status
+        ? `${t('studio.model')} · ${
+            ready
+              ? t('studio.ready')
+              : running
+                ? t('studio.preparing')
+                : t('studio.unprepared')
+          }`
+        : '';
+
+      const start = () => {
+        ensureAudio();
+        if (store.get().phase === 'setup') {
+          store.set({ phase: 'idle', setupOpen: false });
+        }
+        void begin(null, undefined, false, 'studio');
+      };
+      const closeStudio = () => {
+        resetSessionState();
+        store.set({ phase: 'idle' });
+      };
+      const onMic = () => {
+        if (recording) {
+          void finish('stop');
+          return;
+        }
+        if (requesting || finishing) {
+          void cancel();
+          return;
+        }
+        if (phase === 'setup') return;
+        start();
+      };
+      const copy = async (text, id) => {
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopiedId(id);
+          setTimeout(() => setCopiedId(''), 1500);
+        } catch (error) {
+          setActionError(messageOf(error));
+        }
+      };
+      const removeItem = async (item) => {
+        if (typeof window.confirm === 'function' && !window.confirm(t('studio.confirmDelete'))) {
+          return;
+        }
+        setActionError('');
+        try {
+          const response = await fetch(`${API}/recordings/${encodeURIComponent(item.id)}`, {
+            method: 'DELETE',
+          });
+          await readJsonResponse(response);
+          store.set({ historyVersion: (store.get().historyVersion || 0) + 1 });
+        } catch (error) {
+          setActionError(messageOf(error));
+        }
+      };
+
+      const errorKey = `error.${state.error}`;
+      const translatedError = t(errorKey);
+      const errorText =
+        translatedError && translatedError !== errorKey ? translatedError : state.error;
+
+      const statusText = recording
+        ? t('phase.recording')
+        : requesting
+          ? t('phase.requesting')
+          : finishing
+            ? stopFeedback(state, t)
+            : phase === 'setup'
+              ? t('setup.title')
+              : phase === 'result'
+                ? t('result.title')
+                : phase === 'error'
+                  ? t('error.title')
+                  : modelText || t('studio.subtitle');
+
+      const original = state.finalText;
+      const partial = state.partialText;
+      const liveEmpty = !original && !partial;
+      const resultText = state.result?.text || '';
+      const translation = state.translationText;
+
+      let body = null;
+      if (phase === 'setup') {
+        body = h(
+          'div',
+          { className: 'vls-setup' },
+          h(
+            'p',
+            { className: 'vl-note' },
+            ready
+              ? t('setup.ready')
+              : t('setup.body', {
+                  size: formatBytes(estimate || 260 * 1024 * 1024),
+                }),
+          ),
+          running
+            ? h(
+                'div',
+                null,
+                h(
+                  'div',
+                  { className: 'vl-row', style: { justifyContent: 'space-between' } },
+                  h('span', { className: 'vl-note' }, t(`setup.step.${step}`)),
+                  h(
+                    'span',
+                    { className: 'vl-sub' },
+                    total > 0
+                      ? `${formatBytes(done)} / ${formatBytes(total)} · ${percent}%`
+                      : t('setup.preparing'),
+                  ),
+                ),
+                h(
+                  'div',
+                  {
+                    className: 'vl-progress',
+                    'data-indeterminate': total > 0 ? 'false' : 'true',
+                    style: { marginTop: '6px' },
+                  },
+                  h('i', { style: { width: `${percent}%` } }),
+                ),
+              )
+            : null,
+          failed
+            ? h(
+                'p',
+                { className: 'vls-error' },
+                t('setup.failed', {
+                  message: preparation.message ?? state.prepareError ?? '',
+                }),
+              )
+            : null,
+          state.prepareError && !failed
+            ? h('p', { className: 'vls-error' }, state.prepareError)
+            : null,
+          !running && !ready && sources.length > 0
+            ? h(
+                'div',
+                { className: 'vl-row', style: { marginTop: '10px' } },
+                h('span', { className: 'vl-note' }, t('setup.source')),
+                h(
+                  'select',
+                  {
+                    className: 'vl-select',
+                    value: state.downloadSource,
+                    onChange: (event) => store.set({ downloadSource: event.target.value }),
+                  },
+                  h('option', { value: '' }, t('setup.sourceAuto')),
+                  sources.map((source) =>
+                    h(
+                      'option',
+                      { key: source, value: source },
+                      source.replace(/^https?:\/\//, ''),
+                    ),
+                  ),
+                ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'vls-actions' },
+            ready
+              ? h(
+                  'button',
+                  { className: 'vl-btn', 'data-primary': 'true', onClick: start },
+                  t('setup.start'),
+                )
+              : running
+                ? h(
+                    'button',
+                    {
+                      className: 'vl-btn',
+                      onClick: () =>
+                        void cancelPreparation(state.providerId || provider?.id),
+                    },
+                    t('setup.cancel'),
+                  )
+                : h(
+                    'button',
+                    {
+                      className: 'vl-btn',
+                      'data-primary': 'true',
+                      onClick: () =>
+                        void prepare(state.providerId || provider?.id, state.downloadSource),
+                    },
+                    failed ? t('setup.retry') : t('setup.download'),
+                  ),
+            h('span', { className: 'vl-grow' }),
+            h(
+              'button',
+              { className: 'vl-btn', 'data-quiet': 'true', onClick: dismissSetup },
+              t('setup.later'),
+            ),
+          ),
+          h(
+            'div',
+            { className: 'vl-note', style: { marginTop: '8px' } },
+            t('setup.disk', { size: formatBytes(estimate || 260 * 1024 * 1024) }),
+          ),
+        );
+      } else if (phase === 'error') {
+        body = h(
+          'div',
+          { className: 'vls-setup' },
+          h('p', { className: 'vls-error' }, errorText),
+          h(
+            'div',
+            { className: 'vls-actions' },
+            h(
+              'button',
+              { className: 'vl-btn', 'data-primary': 'true', onClick: start },
+              t('error.retry'),
+            ),
+            h(
+              'button',
+              { className: 'vl-btn', 'data-quiet': 'true', onClick: closeStudio },
+              t('error.close'),
+            ),
+          ),
+        );
+      } else if (phase === 'result') {
+        body = h(
+          'div',
+          { className: 'vls-live' },
+          h(
+            'p',
+            { className: 'vls-live-text', 'data-empty': resultText ? 'false' : 'true' },
+            resultText || t('result.empty'),
+          ),
+          state.translate || translation
+            ? h(StudioTranslation, { t, state })
+            : null,
+          state.report || state.reporting || state.reportError
+            ? h(
+                'div',
+                { className: 'vls-report-block' },
+                h(
+                  'div',
+                  { className: 'vl-label' },
+                  t('studio.report'),
+                  state.reportMode ? h('b', null, 'AUTO') : null,
+                ),
+                state.reporting
+                  ? h('p', { className: 'vl-note' }, t('studio.generating'))
+                  : state.report
+                    ? h(
+                        React.Fragment,
+                        null,
+                        h('pre', { className: 'vls-report-text' }, state.report),
+                        h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'vl-btn',
+                            'data-quiet': 'true',
+                            onClick: () => void copy(state.report, 'report'),
+                          },
+                          copiedId === 'report' ? t('studio.copied') : t('studio.copyReport'),
+                        ),
+                      )
+                    : h(
+                        'p',
+                        { className: 'vls-error' },
+                        t('studio.reportFailed', { message: state.reportError }),
+                      ),
+              )
+            : null,
+          h(
+            'div',
+            { className: 'vls-actions' },
+            resultText
+              ? h(
+                  'button',
+                  {
+                    className: 'vl-btn',
+                    'data-primary': 'true',
+                    onClick: () => void copy(resultText, 'result'),
+                  },
+                  copiedId === 'result' ? t('studio.copied') : t('studio.copy'),
+                )
+              : null,
+            translation
+              ? h(
+                  'button',
+                  {
+                    className: 'vl-btn',
+                    onClick: () => void copy(translation, 'translation'),
+                  },
+                  copiedId === 'translation' ? t('studio.copied') : t('live.translation'),
+                )
+              : null,
+            resultText && !state.report && !state.reporting
+              ? h(
+                  'button',
+                  {
+                    className: 'vl-btn',
+                    disabled: !activeModel(state),
+                    onClick: () => {
+                      if (window.confirm(modelDisclosure(state, t))) {
+                        void generateMeetingReport(resultText, engine.generation);
+                      }
+                    },
+                    title: modelDisclosure(state, t),
+                  },
+                  t('studio.generate'),
+                )
+              : null,
+            h('button', { className: 'vl-btn', onClick: start }, t('studio.again')),
+            h(
+              'button',
+              { className: 'vl-btn', 'data-quiet': 'true', onClick: closeStudio },
+              t('studio.close'),
+            ),
+          ),
+          h(EditedText, { state, t }),
+          state.lastRecording && engine.run?.sealed
+            ? h('p', { className: 'vls-save' }, t('studio.saved'))
+            : null,
+          h(ArchiveStatus, { state, t }),
+        );
+      } else if (recording || requesting || finishing) {
+        body = h(
+          'div',
+          { className: 'vls-live' },
+          h(
+            'p',
+            { className: 'vls-live-text', 'data-empty': liveEmpty ? 'true' : 'false' },
+            original,
+            partial
+              ? h('span', { className: 'vl-partial' }, original ? ` ${partial}` : partial)
+              : null,
+            liveEmpty ? t('live.empty') : null,
+          ),
+          state.translate ? h(StudioTranslation, { t, state }) : null,
+          h(ArchiveStatus, { state, t }),
+          h(
+            'div',
+            { className: 'vls-actions' },
+            requesting
+              ? h(
+                  'button',
+                  {
+                    className: 'vl-btn',
+                    'data-quiet': 'true',
+                    onClick: () => void cancel(),
+                  },
+                  t('studio.cancel'),
+                )
+              : null,
+
+          ),
+        );
+      } else {
+        body = h(
+          'p',
+          { className: 'vl-note', style: { marginTop: '10px' } },
+          t('studio.hint'),
+        );
+      }
+
+      return h(
+        'div',
+        { className: 'vls-page' },
+        h(
+          'div',
+          { className: 'vls-inner' },
+          h(
+            'div',
+            { className: 'vls-head' },
+            h(
+              'div',
+              null,
+              h('h1', { className: 'vls-title' }, t('studio.title')),
+              h('p', { className: 'vls-sub' }, t('studio.subtitle'), ` · v${BUILD}`),
+            ),
+            h(
+              'div',
+              { className: 'vls-head-actions' },
+              modelText ? h('span', { className: 'vls-sub' }, modelText) : null,
+            ),
+          ),
+          h(
+            'section',
+            { className: 'vls-card' },
+            h(
+              'div',
+              { className: 'vls-rec' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'vls-mic',
+                  'data-recording': recording ? 'true' : 'false',
+                  disabled: phase === 'setup' || finishing,
+                  title: recording
+                    ? t('studio.stop')
+                    : requesting || finishing
+                      ? t('studio.cancel')
+                      : t('studio.record'),
+                  'aria-label': recording ? t('studio.stop') : t('studio.record'),
+                  onClick: onMic,
+                },
+                h(Icon, { name: recording ? 'stop' : 'mic', size: 22 }),
+              ),
+              h(
+                'div',
+                { className: 'vls-rec-main' },
+                h('div', { className: 'vls-time' }, formatTime(state.elapsed)),
+                h(
+                  'div',
+                  { className: 'vls-rec-state' },
+                  recording
+                    ? h('span', { className: 'vl-pulse' })
+                    : requesting || finishing
+                      ? h('span', { className: 'vl-spin' })
+                      : null,
+                  h('span', null, statusText),
+                ),
+              ),
+              h(
+                'div',
+                { className: 'vls-rec-side' },
+                h(Waveform, { level: state.level, phase: state.elapsed }),
+                h(
+                  'span',
+                  { className: 'vls-lang' },
+                  h('span', { className: 'vl-label' }, t('language.title')),
+                  h(SourceSelect, { t }),
+                ),
+              ),
+            ),
+            h('details', { className: 'vls-options' },
+              h('summary', null, t('recording.options')),
+              h('div', { className: 'vls-options-row' },
+                h(TranslateControl, { t }),
+                h(EditControl, { t }),
+                h('button', {
+                  type: 'button', className: 'vl-toggle', 'aria-pressed': state.reportMode,
+                  disabled: !state.reportMode && !activeModel(state),
+                  title: t('studio.reportHint'), onClick: () => setReportMode(!state.reportMode),
+                }, h(Icon, { name: 'file', size: 14 }), t('studio.report')),
+              ),
+              h('p', { className: 'vl-note' }, modelDisclosure(state, t)),
+            ),
+            h(DictationPreferences, { state, t }),
+            body,
+          ),
+          h(
+            'section',
+            { className: 'vls-history' },
+            h(
+              'div',
+              { className: 'vls-history-head' },
+              h('h2', { className: 'vls-title2' }, t('studio.history')),
+              h(
+                'span',
+                { className: 'vls-count' },
+                t('studio.count', { n: history.total }),
+              ),
+              h(
+                'div',
+                { className: 'vls-history-actions' },
+                h('input', { className: 'vls-input vls-search', type: 'search', value: query,
+                  'aria-label': t('history.search'), placeholder: t('history.search'), maxLength: 200,
+                  onChange: (event) => { setQuery(event.target.value); setOffset(0); } }),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vls-mini',
+                    onClick: () => setReload((value) => value + 1),
+                  },
+                  t('studio.refresh'),
+                ),
+              ),
+            ),
+            history.root
+              ? h(
+                  'div',
+                  { className: 'vls-path' },
+                  h('span', null, t('studio.path')),
+                  h('code', { title: history.root }, history.root),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'vls-mini',
+                      onClick: () => void copy(history.root, 'root'),
+                    },
+                    copiedId === 'root' ? t('studio.copied') : t('studio.copyPath'),
+                  ),
+                )
+              : null,
+            actionError ? h('div', { className: 'vls-error' }, actionError) : null,
+            history.loading
+              ? h(
+                  'div',
+                  { className: 'vls-loading' },
+                  h('span', { className: 'vl-spin' }),
+                  t('studio.loading'),
+                )
+              : history.error
+                ? h(
+                    'div',
+                    { className: 'vls-error' },
+                    history.error,
+                    ' ',
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'vls-mini',
+                        onClick: () => setReload((value) => value + 1),
+                      },
+                      t('studio.retry'),
+                    ),
+                  )
+                : history.items.length === 0
+                  ? h('div', { className: 'vls-empty' }, t(query.trim() ? 'history.noMatch' : 'studio.empty'))
+                  : h(
+                      'ul',
+                      { className: 'vls-list' },
+                      history.items.map((item) => h(HistoryItem, {
+                        key: item.id, item, t, query: history.query ?? '', copy, copiedId, removeItem,
+                        onChanged: () => setReload((value) => value + 1),
+                      })),
+                    ),
+            offset ? h('button', { type: 'button', className: 'vls-mini vls-morepage',
+              onClick: () => setOffset((value) => Math.max(0, value - 25)) }, t('history.previous')) : null,
+            history.nextOffset !== null && !history.error
+              ? h('button', { type: 'button', className: 'vls-mini vls-morepage',
+                  onClick: () => setOffset(history.nextOffset) }, t('history.more'))
+              : null,
+          ),
+        ),
+      );
+    }
+
+    function mountRecordingIndicator(openStudio) {
+      const banner = document.createElement('div');
+      banner.className = 'vl-global';
+      banner.hidden = true;
+      const dot = document.createElement('span');
+      dot.className = 'vl-pulse';
+      dot.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span');
+      label.setAttribute('role', 'status');
+      const elapsed = document.createElement('span');
+      elapsed.className = 'vl-global-time';
+
+      const stop = document.createElement('button');
+      stop.type = 'button';
+      stop.className = 'vl-btn';
+      stop.addEventListener('click', () => void finish('stop'));
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.className = 'vl-btn';
+      open.addEventListener('click', openStudio);
+      banner.append(dot, label, elapsed, stop, open);
+      document.body.append(banner);
+
+      const update = () => {
+        const state = store.get();
+        const recording = state.phase === 'recording';
+        const finishing = state.phase === 'finishing';
+        const result = state.phase === 'result' && (state.surface === 'composer' || state.archiveStage === 'failed' || state.savedNotice);
+        const text = recording ? translate('recording.live')
+          : finishing || result ? stopFeedback(state, translate) : state.savedNotice;
+        banner.hidden = !(recording || finishing || result || state.savedNotice);
+        dot.hidden = elapsed.hidden = stop.hidden = !recording;
+        open.hidden = !(finishing || result);
+        if (label.textContent !== text) label.textContent = text;
+        if (recording) {
+          const time = formatTime(state.elapsed);
+          if (elapsed.textContent !== time) elapsed.textContent = time;
+        }
+        const stopLabel = translate('recording.stop');
+        const openLabel = translate('recording.open');
+        if (stop.textContent !== stopLabel) stop.textContent = stopLabel;
+        if (open.textContent !== openLabel) open.textContent = openLabel;
+      };
+      const unsubscribe = store.subscribe(update);
+      update();
+      return () => { unsubscribe(); banner.remove(); };
+    }
+
+    function handleDictationShortcut(event) {
+      const state = store.get();
+      if (state.shortcut === 'off' || !event.ctrlKey || !event.shiftKey || event.altKey ||
+          event.metaKey || event.code !== state.shortcut || event.isComposing) return;
+      if (state.phase === 'recording') {
+        event.preventDefault();
+        if (!event.repeat) void finish('stop');
+        return;
+      }
+      const composer = engine.activeComposer;
+      if (!composer || composer.locked || !['idle', 'error', 'result'].includes(state.phase)) return;
+      event.preventDefault();
+      if (event.repeat) return;
+      ensureAudio();
+      void begin(composer.inputActions, composer.sessionId, composer.locked);
+    }
+
+    function LiveOverlay(props) {
+      const state = useStore();
+      if (state.surface === 'studio') return null;
+      return h(
+        React.Fragment,
+        null,
+        h(LivePanel, props),
+        h(ResultPanel, props),
+        h(SetupPanel, props),
+        h(ErrorPanel, props),
+      );
+    }
+
+    return {
+      inject: ['slots', 'locale', 'layout'],
+      apply(ctx) {
+        if (window.location.protocol !== 'dsh-app:' || window.location.host !== 'app') return;
+        localeBound = ctx.locale.bind(NS);
+        const style = document.createElement('style');
+        style.setAttribute('data-voice-live', '');
+        style.textContent = CSS;
+        document.head.append(style);
+        ctx.effect(() => () => style.remove(), 'voice-live: styles');
+        ctx.effect(
+          () => () => {
+            void cancel(true);
+            if (engine.audio && engine.audio.state !== 'closed') {
+              engine.audio.close().catch(() => {});
+              engine.audio = null;
+            }
+          },
+          'voice-live: audio',
+        );
+
+        ctx.effect(
+          () => ctx.locale.register(NS, { zh: ZH, en: EN }),
+          'voice-live: dictionaries',
+        );
+
+        ctx.slots.inject('conversation.input.activity', () =>
+          ctx.slots.register(
+            { name: 'conversation.input.activity', locale: NS },
+            VoiceBar,
+          ),
+        );
+        ctx.slots.inject('conversation.input.overlay', () =>
+          ctx.slots.register(
+            { name: 'conversation.input.overlay', locale: NS },
+            LiveOverlay,
+          ),
+        );
+        ctx.slots.inject('sidebar.panellist', () =>
+          ctx.slots.register(
+            {
+              name: 'sidebar.panellist',
+              id: 'voice-live',
+              order: 26,
+              label: () => ctx.locale.bind(NS)('studio.title'),
+            },
+            PanelIcon,
+          ),
+        );
+        ctx.slots.inject('main', () =>
+          ctx.slots.register(
+            { name: 'main', key: 'voice-live', locale: NS },
+            Studio,
+          ),
+        );
+
+        const layout = ctx.get('layout');
+        ctx.effect(() => mountRecordingIndicator(() => layout?.selectPanel?.('voice-live')), 'voice-live: recording indicator');
+        ctx.effect(() => {
+          document.addEventListener('keydown', handleDictationShortcut, true);
+          return () => document.removeEventListener('keydown', handleDictationShortcut, true);
+        }, 'voice-live: dictation shortcut');
+        if (layout) {
+        const OPEN_KEY = 'voice-live:open-nonce';
+        ctx.effect(() => {
+          let disposed = false;
+          let busy = false;
+          const readHandled = () => {
+            try {
+              return Number(window.localStorage.getItem(OPEN_KEY) ?? 0) || 0;
+            } catch {
+              return 0;
+            }
+          };
+          let handled = readHandled();
+          const tick = async () => {
+            if (disposed || busy) return;
+            busy = true;
+            try {
+              const response = await fetch(`${API}/open-state?since=${handled}`, {
+                cache: 'no-store',
+              });
+              const body = await response.json();
+              if (disposed || !body?.ok) return;
+              const nonce = Number(body.nonce) || 0;
+              if (nonce < handled) {
+                handled = nonce;
+                return;
+              }
+              if (nonce <= handled) return;
+              try {
+                layout?.selectPanel?.('voice-live');
+              } catch {
+                return;
+              }
+              handled = nonce;
+              try {
+                window.localStorage.setItem(OPEN_KEY, String(handled));
+              } catch {
+                /* storage unavailable */
+              }
+            } catch {
+              /* host not ready */
+            } finally {
+              busy = false;
+            }
+          };
+          void tick();
+          const timer = setInterval(tick, 1800);
+          return () => {
+            disposed = true;
+            clearInterval(timer);
+          };
+        }, 'voice-live: open signal');
+        }
+      },
+    };
+  },
+});

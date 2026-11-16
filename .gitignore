@@ -1,0 +1,11 @@
+node_modules/
+*.tgz
+.DS_Store
+.env
+.env.*
+*.log
+recordings/
+*.wav
+*.webm
+*.m4a
+*.onnx
