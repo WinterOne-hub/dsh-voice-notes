@@ -197,6 +197,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'share.intro': '以下是「{title}」的录音转写资料。请把转写当作引用材料，根据我的问题分析。',
       'share.selectedIntro': '以下是选中的录音转写片段。请把片段当作引用材料，根据我的问题解释或分析。',
       'share.question': '我的问题或分析要求：',
+      'update.check': '检查更新',
+      'update.checking': '正在检查更新…',
+      'update.current': '已是最新版本',
+      'update.available': '发现新版本 v{version}',
+      'update.install': '一键更新',
+      'update.installing': '正在下载、校验并安装更新…',
+      'update.restart': '已安装 v{version}，重启 Harness 后生效。',
+      'update.installed': '已安装 v{version}。',
+      'update.busy': '请等当前录音、导入或转写完成后再更新。',
+      'update.unsupported': '当前 Harness 配置暂不支持一键更新。',
+      'update.incompatible': '新版本与当前 Harness 不兼容。',
+      'update.changed': '发布版本已变化，请重新检查。',
+      'update.checkFailed': '暂时无法检查更新，请稍后重试。',
+      'update.downloadFailed': '安装包下载失败，请稍后重试。',
+      'update.unverified': '安装包校验失败，更新已停止。',
+      'update.installFailed': '更新未完成，请在 Harness 的插件页面查看安装状态。',
+      'update.releases': '查看发布页',
       'studio.subtitle': '本机识别 · 录音自动保存到历史',
       'studio.record': '开始录音',
       'studio.stop': '停止并保存',
@@ -392,6 +409,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'share.intro': 'The transcript below is from “{title}”. Use it as reference material when answering my question.',
       'share.selectedIntro': 'The excerpt below was selected from a recording transcript. Use it as reference material when explaining or analyzing my question.',
       'share.question': 'My question or analysis request:',
+      'update.check': 'Check for updates',
+      'update.checking': 'Checking for updates…',
+      'update.current': 'Up to date',
+      'update.available': 'Version v{version} is available',
+      'update.install': 'Update now',
+      'update.installing': 'Downloading, verifying and installing the update…',
+      'update.restart': 'v{version} installed. Restart Harness to apply it.',
+      'update.installed': 'v{version} installed.',
+      'update.busy': 'Wait for recording, import or transcription to finish before updating.',
+      'update.unsupported': 'One-click updates are unavailable in this Harness configuration.',
+      'update.incompatible': 'The update is incompatible with this version of Harness.',
+      'update.changed': 'The published version changed. Check again.',
+      'update.checkFailed': 'Could not check for updates. Try again later.',
+      'update.downloadFailed': 'Could not download the package. Try again later.',
+      'update.unverified': 'Package verification failed. The update was stopped.',
+      'update.installFailed': 'The update did not complete. Check its status on the Harness Plugins page.',
+      'update.releases': 'View releases',
       'studio.subtitle': 'On-device recognition · recordings are archived automatically',
       'studio.record': 'Start recording',
       'studio.stop': 'Stop and save',
@@ -592,6 +626,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-history-actions { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
 .vls-history-actions .vls-search { min-width: 0; }
 .vls-history-actions .vls-mini { flex: none; white-space: nowrap; }
+.vls-update { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; }
+.vls-update [role="alert"] { color: var(--dsw-alias-state-error-primary); }
 .vls-path { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 8px 0 12px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .vls-path code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
 .vls-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
@@ -709,6 +745,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       transcribingSegments: 0,
       savedNotice: '',
       importing: false,
+      updating: false,
       importNotice: '',
       importError: '',
       reportLanguage: REPORT_LANGUAGES.some(([code]) => code === prefs.reportLanguage) ? prefs.reportLanguage : 'auto',
@@ -861,7 +898,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
       if (!response.ok || !body || body.ok === false) {
         const message = body?.error?.message || `HTTP ${response.status}`;
-        throw new Error(message);
+        const error = new Error(message);
+        error.code = body?.error?.code;
+        throw error;
       }
       return body;
     }
@@ -1025,7 +1064,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     async function importAudio(load, { title, mimeType, language, source }) {
       const current = store.get();
-      if (current.importing || ['requesting', 'recording', 'finishing'].includes(current.phase)) return;
+      if (current.importing || current.updating || ['requesting', 'recording', 'finishing'].includes(current.phase)) return;
       store.set({ importing: true, importNotice: translate('import.reading'), importError: '' });
       let run;
       let audioSaved = false;
@@ -1678,7 +1717,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     async function begin(inputActions, sessionId, locked, surface = 'composer') {
-      if (locked) return;
+      if (locked || store.get().updating) return;
       if (store.get().phase !== 'idle' && store.get().phase !== 'result' && store.get().phase !== 'error') {
         return;
       }
@@ -3416,6 +3455,62 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       );
     }
 
+    function UpdateControl({ state, t }) {
+      const [view, setView] = React.useState({ state: 'checking' });
+      const busy = state.importing || state.retrySaving || state.preparing || state.reporting ||
+        state.editing || state.translating || ['requesting', 'recording', 'finishing'].includes(state.phase);
+
+      async function check(refresh = false) {
+        if (refresh) setView({ state: 'checking' });
+        try {
+          setView(await request(refresh ? '/update?refresh=1' : '/update', { method: 'GET' }));
+        } catch (error) {
+          setView({ state: 'error', code: error.code || 'checkFailed' });
+        }
+      }
+
+      React.useEffect(() => { void check(); }, []);
+      React.useEffect(() => {
+        if (view.state !== 'installing' || state.updating) return;
+        const timer = setTimeout(() => void check(), 3_000);
+        return () => clearTimeout(timer);
+      }, [view, state.updating]);
+
+      async function install() {
+        if (busy || store.get().updating || view.state !== 'available' || !view.canInstall) return;
+        store.set({ updating: true });
+        setView({ state: 'installing' });
+        try {
+          setView(await request('/update', { json: { version: view.version } }));
+        } catch (error) {
+          setView({ state: 'error', code: error.code || 'installFailed' });
+        } finally {
+          store.set({ updating: false });
+        }
+      }
+
+      const phase = state.updating ? 'installing' : view.state;
+      const key = `update.${view.code}`;
+      const message = phase === 'error'
+        ? t(Object.hasOwn(EN, key) ? key : 'update.installFailed')
+        : t(`update.${phase}`, { version: view.version });
+      return h('div', { className: 'vls-update' },
+        h('span', { className: 'vls-sub', role: phase === 'error' ? 'alert' : 'status' }, message),
+        phase === 'available' && view.canInstall ? h('button', {
+          type: 'button', className: 'vl-btn', disabled: busy, onClick: install,
+        }, t('update.install')) : null,
+        phase === 'available' && busy && view.canInstall ? h('span', { className: 'vls-sub' }, t('update.busy')) : null,
+        phase === 'available' && !view.canInstall ? h(React.Fragment, null,
+          h('span', { className: 'vls-sub' }, t('update.unsupported')),
+          h('a', { className: 'vls-mini', href: 'https://github.com/WinterOne-hub/dsh-voice-notes/releases',
+            target: '_blank', rel: 'noopener noreferrer' }, t('update.releases')),
+        ) : null,
+        ['current', 'error', 'available'].includes(phase) ? h('button', {
+          type: 'button', className: 'vls-mini', onClick: () => void check(true),
+        }, t('update.check')) : null,
+      );
+    }
+
     function Studio(props) {
       const t = translate;
       const state = useStore();
@@ -3926,6 +4021,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               null,
               h('h1', { className: 'vls-title' }, t('studio.title')),
               h('p', { className: 'vls-sub' }, t('studio.subtitle'), ` · v${BUILD}`),
+              h(UpdateControl, { state, t }),
             ),
             h(
               'div',
@@ -3936,7 +4032,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 onChange: chooseAudio,
               }),
               h('button', {
-                type: 'button', className: 'vl-btn', disabled: state.importing || recording || requesting || finishing,
+                type: 'button', className: 'vl-btn', disabled: state.importing || state.updating || recording || requesting || finishing,
                 title: t('import.formats'), onClick: () => importPicker.current?.click(),
               }, t('import.open')),
             ),
@@ -4163,7 +4259,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function handleDictationShortcut(event) {
       const state = store.get();
-      if (state.shortcut === 'off' || !event.ctrlKey || !event.shiftKey || event.altKey ||
+      if (state.updating || state.shortcut === 'off' || !event.ctrlKey || !event.shiftKey || event.altKey ||
           event.metaKey || event.code !== state.shortcut || event.isComposing) return;
       if (state.phase === 'recording') {
         event.preventDefault();

@@ -18,6 +18,7 @@
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRecordingStore, correctedTranscript, extensionFor, normalizeMime, recordingStatus, StorageError } from './storage.js';
+import { createUpdater, UpdateError } from './updater.js';
 
 /** Prefix shared by every route this plugin owns. */
 const API = '/api/voice-live';
@@ -365,6 +366,14 @@ export async function apply(ctx, config) {
   const speechWork = { active: 0, max: 3 };
   const modelWork = { active: 0, max: 3 };
   const setupWork = { active: 0, max: 1 };
+  const updater = createUpdater({
+    dataRoot,
+    getManager: () => {
+      const manager = ctx.get('pluginManager');
+      return typeof manager?.installBundle === 'function' ? manager : null;
+    },
+    isBusy: () => [archiveWrites, speechWork, modelWork, setupWork].some((work) => work.active > 0),
+  });
   let openNonce = 0;
 
   function authorize(req) {
@@ -389,10 +398,14 @@ export async function apply(ctx, config) {
       authorize(req);
       await within(capacity, () => run(req, res, method));
     } catch (error) {
-      const known = error instanceof HttpError || error instanceof StorageError;
+      const updateError = error instanceof UpdateError;
+      const known = error instanceof HttpError || error instanceof StorageError || updateError;
       const status = known ? error.status : 500;
       if (!known) ctx.logger?.warn?.('voice-live request failed');
-      writeJson(res, status, { ok: false, error: { message: known ? error.message : '语音速记请求处理失败' } }, method);
+      writeJson(res, status, { ok: false, error: {
+        message: known ? error.message : '语音速记请求处理失败',
+        ...(updateError ? { code: error.code } : {}),
+      } }, method);
     }
   };
 
@@ -884,12 +897,27 @@ export async function apply(ctx, config) {
     writeJson(res, 200, { ok: true, nonce: openNonce, open: openNonce > since }, method);
   });
 
+  const update = handler(async (req, res, method) => {
+    if (method === 'GET' || method === 'HEAD') {
+      const url = new URL(req.url ?? '/', 'http://localhost');
+      const result = await updater.status(url.searchParams.get('refresh') === '1');
+      writeJson(res, 200, { ok: true, ...result }, method);
+    } else if (method === 'POST') {
+      const { version } = await readJson(req, 256);
+      if (typeof version !== 'string') throw new UpdateError('changed', 400);
+      writeJson(res, 200, { ok: true, ...await updater.install(version) }, method);
+    } else {
+      throw new HttpError(405, '只支持 GET 或 POST');
+    }
+  });
+
   const routes = [
     ['/status', status],
     ['/normalize', normalize],
     ['/report', report],
     ['/open', open],
     ['/open-state', openState],
+    ['/update', update],
     ['/prepare', prepare],
     ['/cancel', cancel],
     ['/transcribe', transcribe],

@@ -390,6 +390,8 @@ test('every voice endpoint requires the signed desktop browser session and rejec
     ['/status', 'GET'],
     ['/open-state', 'GET'],
     ['/open', 'POST'],
+    ['/update', 'GET'],
+    ['/update', 'POST', { version: '0.0.3' }],
     ['/prepare', 'POST', {}],
     ['/cancel', 'POST', {}],
     ['/translate', 'POST', { text: 'fixture', target: 'zh', model }],

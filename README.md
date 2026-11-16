@@ -39,6 +39,8 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 3. 完全退出再打开 Harness，从侧栏打开「语音速记」。如果已安装语音速记的旧本地包，请先卸载旧包再启用新版；两个包提供同一套语音服务和面板。旧录音继续使用同一个本地数据目录。
 4. 卸载可使用「插件」页面，或运行 `dsh plugin --profile desktop remove dsh-voice-notes`。
 
+打开语音速记工作台时会检查 GitHub 上的正式版本，也可以手动点「检查更新」。发现更新后，点「一键更新」即可下载并校验安装包，由 Harness 的插件管理器安装。按界面提示重启 Harness 即可生效。更新不会改动录音文件。已经安装较早的 v0.0.2 用户需要先手动安装带更新入口的构建。
+
 从源码打包时运行 `npm test` 和 `npm pack --ignore-scripts`。本插件使用 Harness 随附的语音服务和 SenseVoice provider。请按应用提示准备模型。
 
 - `client.js` 注册输入框和侧栏，负责麦克风、字幕和历史。
@@ -58,6 +60,8 @@ Voice Notes brings local speech-to-text to DeepSeek Harness Desktop for macOS. D
 ### Install
 
 Download `dsh-voice-notes-0.0.2.tgz` and `SHA256SUMS` from the same [GitHub release](https://github.com/WinterOne-hub/dsh-voice-notes/releases). Run `shasum -a 256 -c SHA256SUMS` in the download directory, then add the package on the **Plugins** page, enable it and restart Harness. The verified host is Harness Desktop 0.2.2-rc.3. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+
+Voice Notes checks the official GitHub release when you open the studio. You can check again manually. **Update now** downloads and verifies the package, then installs it through the Harness plugin manager. Follow the restart prompt to apply the update. An earlier v0.0.2 build needs a manual installation of the build with the updater first.
 
 ### Use Voice Notes
 

@@ -12,6 +12,7 @@
   "files": [
     "index.js",
     "storage.js",
+    "updater.js",
     "client.js",
     "cordis.patch.yml",
     "locale/*.json",
