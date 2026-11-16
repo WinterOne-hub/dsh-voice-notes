@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.1';
+    const BUILD = '0.0.2';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -35,6 +35,18 @@ window.__ModuleLoader__.load({
       ['es', 'Español'],
       ['ru', 'Русский'],
     ];
+    const REPORT_LANGUAGES = [['auto', 'report.auto'], ...TARGETS.filter(([code]) => code !== 'off')];
+    const AUDIO_FORMATS = {
+      mp3: 'audio/mpeg',
+      wav: 'audio/wav',
+      m4a: 'audio/mp4',
+      flac: 'audio/flac',
+      ogg: 'audio/ogg',
+      opus: 'audio/ogg',
+      webm: 'audio/webm',
+    };
+    const MAX_IMPORT_BYTES = 128 * 1024 ** 2;
+    const MAX_IMPORT_SECONDS = 2 * 3600;
     const SHORTCUTS = [
       ['off', 'shortcut.off'],
       ['KeyY', 'Ctrl+Shift+Y'],
@@ -150,7 +162,41 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'error.nodevice': '没有找到可用的麦克风。',
       'error.empty': '没有录到声音。',
       'error.tooLong': '录音太长，已自动停止。',
-      'studio.title': '语音速记',
+      'studio.title': '语音速记 · 录音转文字',
+      'import.open': '导入本地录音',
+      'import.formats': '支持 MP3、WAV、M4A、FLAC、OGG、Opus 和 WebM，每条至多 128 MiB、2 小时。',
+      'import.invalid': '请选择支持的音频文件。',
+      'import.tooLarge': '音频超过 128 MiB 或 2 小时。',
+      'import.decodeFailed': '这个音频文件无法解码。请确认文件能播放并使用支持的格式。',
+      'import.prepare': '请先下载并准备本机语音模型，再导入录音。',
+      'import.reading': '正在读取音频…',
+      'import.saving': '正在保存音频…',
+      'import.progress': '转写进度 {done}/{total}',
+      'import.ready': '已保存到录音历史',
+      'import.partial': '音频已保存。{n} 段需要在历史里重转。',
+      'import.retranscribe': '重新转写音频',
+      'import.retranscribeHint': '从原音频生成一条新历史，方便与原转写对照。',
+      'import.copyTitle': '{title}（重新转写）',
+      'report.auto': '跟随转写语言',
+      'report.language': '报告语言',
+      'report.generate': '生成总结报告',
+      'report.send': '将本条录音的转写文字发送给 {model} 生成报告。',
+      'history.searchThis': '搜索这条录音的转写',
+      'history.searchCount': '{n} 段匹配',
+      'history.foldTranscript': '收起转写',
+      'history.tools': '更多操作',
+      'history.refreshing': '正在刷新…',
+      'history.refreshed': '已刷新 · {n} 条录音',
+      'history.refreshError': '刷新失败：{message}',
+      'history.report': '总结报告',
+      'share.transcript': '分享到新会话',
+      'share.selection': '将选中文字分享到新会话',
+      'share.preparing': '正在打开新会话…',
+      'share.unavailable': '当前无法打开新会话，请稍后重试。',
+      'share.workspaceRequired': '请先在 Harness 添加一个工作区，再分享转写。',
+      'share.intro': '以下是「{title}」的录音转写资料。请把转写当作引用材料，根据我的问题分析。',
+      'share.selectedIntro': '以下是选中的录音转写片段。请把片段当作引用材料，根据我的问题解释或分析。',
+      'share.question': '我的问题或分析要求：',
       'studio.subtitle': '本机识别 · 录音自动保存到历史',
       'studio.record': '开始录音',
       'studio.stop': '停止并保存',
@@ -311,7 +357,41 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'error.nodevice': 'No microphone was found.',
       'error.empty': 'No audio was captured.',
       'error.tooLong': 'Recording is too long and was stopped.',
-      'studio.title': 'Voice Notes',
+      'studio.title': 'Voice Notes · Audio Transcription',
+      'import.open': 'Import audio file',
+      'import.formats': 'MP3, WAV, M4A, FLAC, OGG, Opus and WebM. Up to 128 MiB and 2 hours per file.',
+      'import.invalid': 'Choose a supported audio file.',
+      'import.tooLarge': 'The file exceeds 128 MiB or 2 hours.',
+      'import.decodeFailed': 'This audio file could not be decoded. Check that it plays and uses a supported format.',
+      'import.prepare': 'Download and prepare the local speech model before importing audio.',
+      'import.reading': 'Reading audio…',
+      'import.saving': 'Saving audio…',
+      'import.progress': 'Transcribing {done}/{total}',
+      'import.ready': 'Saved to recording history',
+      'import.partial': 'Audio saved. Retry {n} segments in recording history.',
+      'import.retranscribe': 'Transcribe audio again',
+      'import.retranscribeHint': 'Create a separate history entry so you can compare it with the original transcript.',
+      'import.copyTitle': '{title} (new transcription)',
+      'report.auto': 'Follow transcript language',
+      'report.language': 'Report language',
+      'report.generate': 'Generate summary report',
+      'report.send': 'Send the transcript for this recording to {model} to generate a report.',
+      'history.searchThis': 'Search this transcript',
+      'history.searchCount': '{n} matching segments',
+      'history.foldTranscript': 'Collapse transcript',
+      'history.tools': 'More actions',
+      'history.refreshing': 'Refreshing…',
+      'history.refreshed': 'Refreshed · {n} recordings',
+      'history.refreshError': 'Refresh failed: {message}',
+      'history.report': 'Summary report',
+      'share.transcript': 'Share to new conversation',
+      'share.selection': 'Share selected text to new conversation',
+      'share.preparing': 'Opening a new conversation…',
+      'share.unavailable': 'Could not open a new conversation. Try again.',
+      'share.workspaceRequired': 'Add a workspace in Harness before sharing a transcript.',
+      'share.intro': 'The transcript below is from “{title}”. Use it as reference material when answering my question.',
+      'share.selectedIntro': 'The excerpt below was selected from a recording transcript. Use it as reference material when explaining or analyzing my question.',
+      'share.question': 'My question or analysis request:',
       'studio.subtitle': 'On-device recognition · recordings are archived automatically',
       'studio.record': 'Start recording',
       'studio.stop': 'Stop and save',
@@ -509,14 +589,25 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-history-head { display: flex; align-items: baseline; gap: 8px; }
 .vls-title2 { margin: 0; font-size: 15px; font-weight: 600; }
 .vls-count { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
-.vls-history-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.vls-history-actions { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
+.vls-history-actions .vls-search { min-width: 0; }
+.vls-history-actions .vls-mini { flex: none; white-space: nowrap; }
 .vls-path { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 8px 0 12px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .vls-path code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
 .vls-list { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .vls-item { border: 1px solid var(--dsw-alias-border-l1); border-radius: 13px; background: var(--dsw-alias-bg-layer-1); padding: 12px 14px 11px; }
 .vls-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .vls-item-title { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
-.vls-item-actions { display: flex; align-items: center; gap: 3px; margin-left: auto; }
+.vls-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.vls-history-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.vls-history-actions-row [data-primary="true"] { color: var(--dsw-alias-brand-primary, #3267d6); }
+.vls-item-tools { width: 100%; }
+.vls-item-tools summary { width: fit-content; cursor: pointer; }
+.vls-transcript-open { max-height: min(400px, 62vh); overflow: auto; overscroll-behavior: contain; margin-block: 8px; padding-inline: 6px; }
+.vls-transcript-open:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, #3267d6); }
+.vls-share-selection { position: fixed; z-index: 999; transform: translateX(-50%); padding: 3px; border-radius: 8px; background: var(--dsw-alias-bg-layer-1, #fff); border: 1px solid var(--dsw-alias-border-l1, #ccc); box-shadow: 0 4px 16px #0002; white-space: nowrap; }
+.vls-share-selection .vls-mini { color: var(--dsw-alias-label-primary, #111); }
+[data-vls-transcript] { user-select: text; }
 .vls-mini { display: inline-flex; align-items: center; justify-content: center; height: 24px; padding: 0 7px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; text-decoration: none; cursor: pointer; }
 .vls-mini:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vls-mini[data-danger="true"]:hover { color: var(--dsw-alias-state-error-primary); }
@@ -617,6 +708,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       archiveStage: '',
       transcribingSegments: 0,
       savedNotice: '',
+      importing: false,
+      importNotice: '',
+      importError: '',
+      reportLanguage: REPORT_LANGUAGES.some(([code]) => code === prefs.reportLanguage) ? prefs.reportLanguage : 'auto',
       targetLanguage: savedTarget,
       sourceLanguage: savedSource,
       translate: savedTarget !== 'off',
@@ -678,6 +773,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     let localeBound;
+    let transcriptSharing;
     const messageOf = (error) =>
       error instanceof Error ? error.message : String(error ?? '未知错误');
 
@@ -920,6 +1016,91 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const { id, wave, start, end } = segment;
       const query = new URLSearchParams({ start, end, checkpoint: checkpoint ? '1' : '0' });
       await writeArchive(`${archivePath(run)}/segments/${id}?${query}`, { method: 'PUT', bytes: wave });
+    }
+
+    function importedMime(file) {
+      const extension = file.name?.split('.').at(-1)?.toLowerCase();
+      return Object.hasOwn(AUDIO_FORMATS, extension) ? AUDIO_FORMATS[extension] : null;
+    }
+
+    async function importAudio(load, { title, mimeType, language, source }) {
+      const current = store.get();
+      if (current.importing || ['requesting', 'recording', 'finishing'].includes(current.phase)) return;
+      store.set({ importing: true, importNotice: translate('import.reading'), importError: '' });
+      let run;
+      let audioSaved = false;
+      try {
+        if (!mimeType) throw new Error(translate('import.invalid'));
+        const status = await fetchStatus();
+        const provider = providerOf(status);
+        if (!isUsable(provider)) {
+          if (provider && !['requesting', 'recording', 'finishing'].includes(store.get().phase)) {
+            store.set({ phase: 'setup', surface: 'studio', setupOpen: true, status, providerId: provider.id });
+          }
+          throw new Error(translate('import.prepare'));
+        }
+        const audio = await load();
+        if (!audio?.size) throw new Error(translate('import.invalid'));
+        if (audio.size > MAX_IMPORT_BYTES) throw new Error(translate('import.tooLarge'));
+        let decoded;
+        try {
+          const decoder = new OfflineAudioContext(1, 1, SAMPLE_RATE);
+          decoded = await decoder.decodeAudioData(await audio.arrayBuffer());
+        } catch {
+          throw new Error(translate('import.decodeFailed'));
+        }
+        if (!Number.isFinite(decoded.duration) || decoded.duration > MAX_IMPORT_SECONDS) {
+          throw new Error(translate('import.tooLarge'));
+        }
+        if (decoded.duration < 0.05) throw new Error(translate('import.invalid'));
+        store.set({ importNotice: translate('import.saving') });
+        const { recording } = await request('/recordings/live', {
+          json: { title, mimeType, language, source, providerId: provider.id },
+        });
+        run = { id: recording.id };
+        const path = archivePath(run);
+        const partSize = 1024 * 1024;
+        for (let at = 0; at < audio.size; at += partSize) {
+          const duration = decoded.duration * Math.min(at + partSize, audio.size) / audio.size;
+          await writeArchive(`${path}/chunks/${at / partSize}?duration=${duration}`, {
+            method: 'PUT', bytes: audio.slice(at, at + partSize),
+          });
+        }
+        audioSaved = true;
+        const rate = decoded.sampleRate;
+        const frames = Math.round(SEGMENT_SECONDS * rate);
+        const total = Math.ceil(decoded.length / frames);
+        const channels = Array.from({ length: decoded.numberOfChannels }, (_, channel) => decoded.getChannelData(channel));
+        let pending = 0;
+        for (let start = 0, id = 0; start < decoded.length; start += frames, id += 1) {
+          const end = Math.min(start + frames, decoded.length);
+          if ((end - start) / rate < 0.05) break;
+          store.set({ importNotice: translate('import.progress', { done: id + 1, total }) });
+          const samples = new Float32Array(end - start);
+          for (const channel of channels) {
+            for (let at = start; at < end; at += 1) samples[at - start] += channel[at] / channels.length;
+          }
+          await putSegment(run, { id, start: start / rate, end: end / rate, wave: encodeWave([samples], rate) });
+          try {
+            const result = await request(`${path}/segments/${id}/retry?live=1`);
+            if (result.segment.state !== 'ready') pending += 1;
+          } catch {
+            pending += 1;
+          }
+        }
+        await writeArchive(path, { method: 'PATCH', json: { status: 'complete', duration: decoded.duration } });
+        store.set({ importNotice: translate(pending ? 'import.partial' : 'import.ready', { n: pending }) });
+        return run.id;
+      } catch (error) {
+        if (run && audioSaved) {
+          await writeArchive(archivePath(run), { method: 'PATCH', json: { status: 'interrupted' } }).catch(() => {});
+        }
+        store.set({ importNotice: '', importError: messageOf(error) });
+      } finally {
+        store.set((state) => ({
+          ...state, importing: false, historyVersion: state.historyVersion + (run ? 1 : 0),
+        }));
+      }
     }
 
     async function sealArchive(run) {
@@ -1453,33 +1634,40 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
     }
 
+    function resolveReportLanguage(preference, source) {
+      if (preference !== 'auto') return preference;
+      if (/[\u3040-\u30ff]/.test(source)) return 'ja';
+      if (/[\uac00-\ud7af]/.test(source)) return 'ko';
+      const han = (source.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
+      const latin = (source.match(/[A-Za-z]/g) ?? []).length;
+      return han > 0 && han >= latin * 0.4 ? 'zh' : 'en';
+    }
+
+    async function createMeetingReport(source, model, preference) {
+      const language = resolveReportLanguage(preference, source);
+      const send = async (text, mode, compact) => {
+        const body = await request('/report', { json: { text, mode, compact, language, model } });
+        return String(body.report ?? '').trim();
+      };
+      if (source.length <= 12_000) return send(source);
+      let parts = [];
+      for (const chunk of splitText(source, 12_000)) parts.push(await send(chunk, 'part'));
+      while (parts.length > 1) {
+        const merged = [];
+        for (let index = 0; index < parts.length; index += 4) {
+          merged.push(await send(parts.slice(index, index + 4).join('\n\n'), 'merge', parts.length > 4));
+        }
+        parts = merged;
+      }
+      return parts[0];
+    }
+
     async function generateMeetingReport(text, generation, run = engine.run) {
       const source = String(text ?? '').trim();
       if (!source) return;
       store.set({ reporting: true, reportError: '' });
       try {
-        const han = (source.match(/[\u3400-\u9fff\uf900-\ufaff]/g) ?? []).length;
-        const latin = (source.match(/[A-Za-z]/g) ?? []).length;
-        const language = han > 0 && han >= latin * 0.4 ? 'Chinese' : 'English';
-        const send = async (text, mode) => {
-          const body = await request('/report', { json: { text, mode, language, model: run?.model ?? null } });
-          return String(body.report ?? '').trim();
-        };
-        let report;
-        if (source.length <= 12_000) {
-          report = await send(source);
-        } else {
-          let parts = [];
-          for (const chunk of splitText(source, 12_000)) parts.push(await send(chunk, 'part'));
-          while (parts.length > 1) {
-            const merged = [];
-            for (let index = 0; index < parts.length; index += 4) {
-              merged.push(await send(parts.slice(index, index + 4).join('\n\n'), 'merge'));
-            }
-            parts = merged;
-          }
-          [report] = parts;
-        }
+        const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage);
         await patchArchive(run, { report });
         if (generation === engine.generation) store.set({ report, reporting: false });
       } catch (error) {
@@ -2771,9 +2959,89 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return segments?.find((part) => seconds >= part.start && seconds < part.end)?.sequence ?? null;
     }
 
-    function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem }) {
+    function ReportLanguageSelect({ value, setValue, t, disabled }) {
+      return h('label', { className: 'vls-lang' },
+        t('report.language'),
+        h('select', {
+          className: 'vl-select', value, disabled,
+          onChange: (event) => setValue(event.target.value),
+        }, REPORT_LANGUAGES.map(([code, label]) => h('option', { key: code, value: code }, code === 'auto' ? t(label) : label))),
+      );
+    }
+
+    async function openTranscriptDraft({ sessions, conversation, workspace, workspaces }, { title, text, excerpt }, t) {
+      const source = text.trim();
+      if (!source || !sessions?.create || !sessions?.using ||
+          !conversation?.input?.requestDraftInitialization || !workspace?.openSession || !workspaces?.list) {
+        throw new Error(t('share.unavailable'));
+      }
+      const catalog = workspaces.list.getSnapshot();
+      if (catalog.phase !== 'ready') throw new Error(t('share.unavailable'));
+      const byId = sessions.list.getSnapshot().byId;
+      let target;
+      let latest = -Infinity;
+      for (const item of catalog.items) {
+        const lastSession = item.sessionIds.reduce((time, id) => Math.max(time, byId[id]?.updatedAt ?? -Infinity), -Infinity);
+        const activity = lastSession === -Infinity ? Date.parse(item.createdAt) : lastSession;
+        if (!target || activity > latest) {
+          target = item;
+          latest = activity;
+        }
+      }
+      if (!target) throw new Error(t('share.workspaceRequired'));
+      const sessionId = await sessions.create({ workspaceId: target.workspaceId });
+      const instruction = t(excerpt ? 'share.selectedIntro' : 'share.intro', { title });
+      const prompt = [instruction, source, t('share.question')].join('\n\n');
+      await sessions.using(sessionId, { source: 'controllerOperation' }, (reference) => {
+        const result = conversation.input.requestDraftInitialization(reference.binding, {
+          prompt,
+          whenDraftExists: 'keep',
+        });
+        if (result !== 'applied') throw new Error(t('share.unavailable'));
+        workspace.openSession(sessionId);
+      });
+    }
+
+    function readTranscriptSelection(root, selection) {
+      if (!root || !selection || selection.isCollapsed || !selection.rangeCount) return null;
+      const region = (node) => (node?.nodeType === 1 ? node : node?.parentElement)
+        ?.closest('[data-vls-transcript]');
+      if (!root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) return null;
+      const anchor = region(selection.anchorNode);
+      const focus = region(selection.focusNode);
+      const range = selection.getRangeAt(0);
+      let text = '';
+      if (anchor && anchor === focus && root.contains(anchor)) {
+        text = selection.toString().trim();
+      } else {
+        const pieces = [];
+        for (const block of root.querySelectorAll('[data-vls-transcript]')) {
+          if (!range.intersectsNode(block)) continue;
+          const clip = range.cloneRange();
+          clip.selectNodeContents(block);
+          if (clip.compareBoundaryPoints(Range.START_TO_START, range) < 0) {
+            clip.setStart(range.startContainer, range.startOffset);
+          }
+          if (clip.compareBoundaryPoints(Range.END_TO_END, range) > 0) {
+            clip.setEnd(range.endContainer, range.endOffset);
+          }
+          const piece = clip.toString().trim();
+          if (piece) pieces.push(piece);
+        }
+        text = pieces.join('\n');
+      }
+      if (!text) return null;
+      const rect = range.getBoundingClientRect();
+      const bounds = root.getBoundingClientRect();
+      if (rect.bottom <= bounds.top || rect.top >= bounds.bottom) return null;
+      return { text, x: (rect.left + rect.right) / 2, top: rect.top, bottom: rect.bottom };
+    }
+
+    function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion }) {
       const [details, setDetails] = React.useState(null);
       const [expanded, setExpanded] = React.useState(false);
+      const [tool, setTool] = React.useState('');
+      const [moreOpen, setMoreOpen] = React.useState(false);
       const [busy, setBusy] = React.useState('');
       const [error, setError] = React.useState('');
       const [rename, setRename] = React.useState(false);
@@ -2782,23 +3050,49 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const [jump, setJump] = React.useState(null);
       const [editing, setEditing] = React.useState(null);
       const [correction, setCorrection] = React.useState('');
+      const [recordingQuery, setRecordingQuery] = React.useState('');
+      const [selection, setSelection] = React.useState(null);
+      const [recognitionLanguage, setRecognitionLanguage] = React.useState(item.language || 'auto');
+      const [reportLanguage, setReportLanguage] = React.useState(store.get().reportLanguage);
       const audioRef = React.useRef(null);
+      const transcriptRoot = React.useRef(null);
       const segmentList = React.useRef(null);
+      const cardTop = React.useRef(null);
       const path = `/recordings/${item.id}`;
-      const text = details?.text ?? item.text;
-      const term = query.trim().toLowerCase();
+      const original = details?.text ?? item.text;
+      const text = details?.correctedText ?? original;
+      const shownQuery = recordingQuery.trim() || query;
+      const term = shownQuery.trim().toLowerCase();
       const segmentMatches = (part) => Boolean(term &&
         [part.text, part.correction].some((value) => value?.toLowerCase().includes(term)));
 
+      async function fetchDetails(signal) {
+        const result = await fetch(`${API}${path}`, { cache: 'no-store', signal });
+        return (await readJsonResponse(result)).recording;
+      }
+
       React.useEffect(() => {
-        if (!expanded) return;
-        let active = true;
-        fetch(`${API}${path}`, { cache: 'no-store' })
-          .then(readJsonResponse)
-          .then((body) => { if (active) setDetails(body.recording); })
-          .catch((failure) => { if (active) setError(messageOf(failure)); });
-        return () => { active = false; };
-      }, [expanded, path, item.status, item.segmentCount, item.pendingCount, item.hasMore, item.hasCorrections]);
+        if (!expanded && !moreOpen && tool !== 'report') return;
+        const controller = new AbortController();
+        fetchDetails(controller.signal)
+          .then((recording) => { if (!controller.signal.aborted) setDetails(recording); })
+          .catch((failure) => { if (!controller.signal.aborted) setError(messageOf(failure)); });
+        return () => controller.abort();
+      }, [expanded, tool, moreOpen, path, refreshVersion, item.status, item.segmentCount, item.pendingCount, item.hasCorrections]);
+
+      React.useEffect(() => {
+        if (!expanded) {
+          setSelection(null);
+          return;
+        }
+        const update = () => setSelection(readTranscriptSelection(transcriptRoot.current, window.getSelection()));
+        document.addEventListener('selectionchange', update);
+        window.addEventListener('scroll', update, true);
+        return () => {
+          document.removeEventListener('selectionchange', update);
+          window.removeEventListener('scroll', update, true);
+        };
+      }, [expanded]);
 
       React.useEffect(() => {
         if (!jump || jump.term !== term || !expanded || !details?.segments || !segmentList.current) return;
@@ -2834,13 +3128,47 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         }
       }
 
-      async function copyOriginal() {
-        if (details || !item.hasMore) {
-          await copy(text, item.id);
-          return;
+      function foldTranscript(restoreFocus) {
+        setExpanded(false);
+        setJump(null);
+        setSelection(null);
+        if (restoreFocus) {
+          cardTop.current?.scrollIntoView({ block: 'nearest' });
+          cardTop.current?.focus({ preventScroll: true });
         }
-        const { recording } = await readJsonResponse(await fetch(`${API}${path}`, { cache: 'no-store' }));
+      }
+
+      async function copyOriginal() {
+        const recording = details ?? await fetchDetails();
         await copy(recording.text, item.id);
+      }
+
+      function share(excerpt) {
+        if (busy) return;
+        void run('share', async () => {
+          const recording = excerpt ? item : (details ?? await fetchDetails());
+          await openTranscriptDraft(transcriptSharing, {
+            title: recording.title,
+            text: excerpt ?? recording.correctedText ?? recording.text ?? '',
+            excerpt: Boolean(excerpt),
+          }, t);
+        });
+      }
+
+      function generateReport() {
+        if (busy) return;
+        void run('report', async () => {
+          const recording = details ?? await fetchDetails();
+          const transcript = (recording.correctedText ?? recording.text ?? '').trim();
+          if (!transcript) return;
+          const model = (await fetchStatus()).model;
+          if (!modelKey(model)) throw new Error(t('model.unavailable'));
+          if (!window.confirm(t('report.send', { model: `${model.provider} / ${model.model}` }))) return;
+          const report = await createMeetingReport(transcript, model, reportLanguage);
+          const { recording: updated } = await request(path, { method: 'PATCH', json: { report } });
+          setDetails(updated);
+          onChanged();
+        });
       }
 
       async function retry(part) {
@@ -2912,7 +3240,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
 
       const active = item.status === 'recording';
-      const hasDetails = Boolean(text || item.hasMore || item.segmentCount > 0 || item.hasCorrections);
+      const hasDetails = Boolean(original || text || item.segmentCount > 0 || item.hasCorrections);
+      const hasTranscript = details ? Boolean(text.trim()) : (item.hasTranscript ?? Boolean(text));
+      const matches = details?.segments?.filter(segmentMatches).length ?? 0;
+
+      function retranscribe() {
+        if (!item.audioUrl || importing) return;
+        void importAudio(async () => {
+          if (item.size > MAX_IMPORT_BYTES) throw new Error(t('import.tooLarge'));
+          const response = await fetch(item.audioUrl, { cache: 'no-store' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.blob();
+        }, {
+          title: t('import.copyTitle', { title: item.title.slice(0, 92) }),
+          mimeType: item.mimeType || 'audio/webm',
+          language: recognitionLanguage,
+          source: 'retranscription',
+        });
+      }
       const derived = (value, label) => value
         ? h('details', { className: 'vls-report-block' },
             h('summary', { className: 'vls-report-summary' }, label),
@@ -2927,16 +3272,45 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           h('span', null, formatDate(item.createdAt)),
           h('span', null, formatTime(item.duration)),
           h('span', null, item.size ? formatBytes(item.size) : t('studio.noAudio')),
+        ),
+        h('div', { className: 'vls-history-actions-row' },
+          hasDetails ? h('button', {
+            type: 'button', className: 'vls-mini', ref: cardTop, 'aria-expanded': expanded,
+            onClick: () => expanded ? foldTranscript(false) : setExpanded(true),
+          }, t(expanded ? 'history.foldTranscript' : item.segmentCount ? 'history.details' : 'history.fullText')) : null,
+          hasTranscript && !active ? h('button', {
+            type: 'button', className: 'vls-mini', 'data-primary': 'true', disabled: Boolean(busy),
+            onClick: () => share(),
+          }, t(busy === 'share' ? 'share.preparing' : 'share.transcript')) : null,
+          !active && item.audioUrl ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
+            disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
+          }, t('import.retranscribe')) : null,
+          !active && (hasTranscript || item.hasReport) ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
+            onClick: () => setTool(tool === 'report' ? '' : 'report'),
+          }, t('history.report')) : null,
+          item.matchingSegments > 0 && term
+            ? h('button', { type: 'button', className: 'vls-mini', onClick: locateMatch }, t('history.jump')) : null,
+        ),
+        h('details', { className: 'vls-item-tools', onToggle: (event) => setMoreOpen(event.currentTarget.open) },
+          h('summary', { className: 'vl-note' }, t('history.tools')),
           h('div', { className: 'vls-item-actions' },
-            h('button', { type: 'button', className: 'vls-mini', disabled: !text || !!busy,
-              onClick: () => void run('copy', copyOriginal) }, copiedId === item.id ? t('studio.copied') : t('studio.copy')),
-            item.downloadUrl && !active
+            original ? h('button', { type: 'button', className: 'vls-mini', disabled: !!busy,
+              onClick: () => void run('copy', copyOriginal) }, copiedId === item.id ? t('studio.copied') : t('studio.copy')) : null,
+            !active && item.downloadUrl
               ? h('a', { className: 'vls-mini', href: item.downloadUrl, download: true }, t('studio.download')) : null,
+            !active && original ? h('a', { className: 'vls-mini', download: true,
+              href: `${API}${path}/transcript?variant=original` }, t('history.exportOriginal')) : null,
+            !active && item.hasCorrections ? h('a', { className: 'vls-mini', download: true,
+              href: `${API}${path}/transcript?variant=corrected` }, t('history.exportCorrected')) : null,
             h('button', { type: 'button', className: 'vls-mini', disabled: active || !!busy,
               onClick: () => { setTitle(item.title); setRename(true); } }, t('history.rename')),
             h('button', { type: 'button', className: 'vls-mini', 'data-danger': 'true', disabled: active || !!busy,
               onClick: () => void removeItem(item) }, t('studio.delete')),
           ),
+          derived(details?.editedText, t('model.edited')),
+          derived(details?.translation, t('live.translation')),
         ),
         rename ? h('form', { className: 'vls-item-head', onSubmit: renameRecording },
           h('input', { className: 'vls-input', 'aria-label': t('history.title'), value: title, required: true,
@@ -2948,23 +3322,53 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         item.status === 'interrupted' ? h('p', { className: 'vl-note' }, t('history.interrupted')) : null,
         item.pendingCount ? h('p', { className: 'vl-note' }, t('history.pending', { n: item.pendingCount })) : null,
         error ? h('p', { className: 'vls-error', role: 'status' }, error) : null,
-        !expanded || !details?.segments?.length
-          ? h('p', { className: 'vls-item-text', 'data-open': expanded ? 'true' : 'false' }, highlighted(text, query) || t('studio.noText')) : null,
-        hasDetails ? h('button', { type: 'button', className: 'vls-more', 'aria-expanded': expanded,
-          onClick: () => { setError(''); setJump(null); setExpanded(!expanded); } }, t(expanded ? 'studio.collapse' : item.segmentCount ? 'history.details' : 'history.fullText')) : null,
-        item.matchingSegments > 0 && term
-          ? h('button', { type: 'button', className: 'vls-mini', onClick: locateMatch },
-              t(jump?.term === term && item.matchingSegments > 1 ? 'history.nextMatch' : 'history.jump'))
-          : null,
         item.audioUrl && !active ? h('audio', { className: 'vls-audio', controls: true, preload: 'none',
           src: item.audioUrl, ref: audioRef,
           onTimeUpdate: (event) => syncPlayback(event.currentTarget),
           onSeeking: (event) => syncPlayback(event.currentTarget),
           onPlay: (event) => syncPlayback(event.currentTarget),
         }) : null,
+        tool === 'transcribe' ? h('div', { className: 'vls-options-row' },
+          h('label', { className: 'vls-lang' }, t('language.title'),
+            h('select', { className: 'vl-select', value: recognitionLanguage, disabled: importing,
+              onChange: (event) => setRecognitionLanguage(event.target.value) },
+              SOURCE_LANGUAGES.map(([code, label]) => h('option', { key: code, value: code }, code === 'auto' ? t(label) : label))),
+          ),
+          h('button', { type: 'button', className: 'vls-mini', disabled: importing,
+            title: t('import.retranscribeHint'), onClick: retranscribe }, t('import.retranscribe')),
+          h('p', { className: 'vl-note' }, t('import.retranscribeHint')),
+        ) : null,
+        tool === 'report' ? h('section', { className: 'vls-report-block' },
+          hasTranscript ? h('div', { className: 'vls-options-row' },
+            h(ReportLanguageSelect, { t, value: reportLanguage, setValue: setReportLanguage, disabled: Boolean(busy) }),
+            h('button', { type: 'button', className: 'vls-mini', disabled: Boolean(busy), onClick: generateReport },
+              t(busy === 'report' ? 'studio.generating' : 'report.generate')),
+          ) : null,
+          !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
+          details?.report ? h('div', null,
+            h('div', { className: 'vls-report-text' }, details.report),
+            h('button', { type: 'button', className: 'vls-mini', onClick: () => void copy(details.report, `${item.id}:report`) },
+              t(copiedId === `${item.id}:report` ? 'studio.copied' : 'studio.copyReport')),
+          ) : null,
+        ) : null,
+        !expanded ? h('p', { className: 'vls-item-text' }, highlighted(text.slice(0, 500), shownQuery) || t('studio.noText')) : null,
         expanded && !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
-        expanded && details?.segments?.length
-          ? h('ol', { className: 'vls-segments', ref: segmentList }, details.segments.map((part) =>
+        expanded && details ? h('div', null,
+          h('div', { className: 'vls-options-row' },
+            h('input', {
+              type: 'search', className: 'vls-input vls-search', value: recordingQuery, maxLength: 200,
+              'aria-label': t('history.searchThis'), placeholder: t('history.searchThis'),
+              onChange: (event) => { setRecordingQuery(event.target.value); setJump(null); },
+            }),
+            recordingQuery.trim() && details.segments?.length
+              ? h('span', { className: 'vl-note' }, t('history.searchCount', { n: matches })) : null,
+            recordingQuery.trim() && matches
+              ? h('button', { type: 'button', className: 'vls-mini', onClick: locateMatch },
+                  t(jump?.term === term && matches > 1 ? 'history.nextMatch' : 'history.jump')) : null,
+          ),
+          h('div', { className: 'vls-transcript-open', ref: transcriptRoot, tabIndex: 0,
+            'aria-label': t('history.details') },
+            details.segments?.length ? h('ol', { className: 'vls-segments', ref: segmentList }, details.segments.map((part) =>
               h('li', {
                 key: part.sequence, className: 'vls-segment', tabIndex: -1,
                 'data-sequence': part.sequence, 'aria-current': playingPart === part.sequence ? 'true' : undefined,
@@ -2980,31 +3384,35 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   : null,
                 h('div', { className: 'vls-segment-text' },
                   part.state === 'ready'
-                    ? highlighted(part.correction ?? part.text, query) || t('history.emptySegment')
+                    ? h('span', { 'data-vls-transcript': true }, highlighted(part.correction ?? part.text, shownQuery) || t('history.emptySegment'))
                     : part.error || '',
-                  part.correction !== undefined
-                    ? h('details', null, h('summary', null, t('history.original')), highlighted(part.text, query)) : null,
+                  part.correction !== undefined ? h('details', null,
+                    h('summary', null, t('history.original')),
+                    h('span', { 'data-vls-transcript': true }, highlighted(part.text, shownQuery)),
+                  ) : null,
                 ),
                 part.state === 'ready' && !active ? correctionControls(part.sequence, part.text || '', part.correction) : null,
               ),
-            )) : null,
-        expanded && details && !details.segments && !active
-          ? h('div', null,
-            details.hasCorrections ? h('p', { className: 'vls-item-text', 'data-open': 'true' },
-              t('history.correction'), ' · ', highlighted(details.correctedText, query)) : null,
-            correctionControls('whole', details.text || '', details.correctedText),
+            )) : h('div', null,
+              h('p', { className: 'vls-item-text', 'data-open': 'true', 'data-vls-transcript': true },
+                highlighted(text, shownQuery) || t('studio.noText')),
+              details.hasCorrections ? h('details', null, h('summary', null, t('history.original')),
+                h('p', { className: 'vls-item-text', 'data-open': 'true', 'data-vls-transcript': true },
+                  highlighted(details.text, shownQuery))) : null,
+              original && !active ? correctionControls('whole', details.text, details.correctedText) : null,
+            ),
+          ),
+          selection ? h('div', { className: 'vls-share-selection', style: {
+            left: Math.max(138, Math.min(window.innerWidth - 138, selection.x)),
+            top: selection.top >= 52 ? selection.top - 40 : Math.max(8, Math.min(window.innerHeight - 44, selection.bottom + 4)),
+          } },
+            h('button', { type: 'button', className: 'vls-mini', disabled: Boolean(busy),
+              onMouseDown: (event) => event.preventDefault(), onClick: () => share(selection.text) },
+              t(busy === 'share' ? 'share.preparing' : 'share.selection')),
           ) : null,
-        expanded && details && !active && (text || details.hasCorrections)
-          ? h('div', { className: 'vls-item-actions' },
-            text ? h('a', { className: 'vls-mini', download: true,
-              href: `${API}${path}/transcript?variant=original` }, t('history.exportOriginal')) : null,
-            details.hasCorrections ? h('a', { className: 'vls-mini', download: true,
-              href: `${API}${path}/transcript?variant=corrected` }, t('history.exportCorrected')) : null,
-          ) : null,
-        expanded && details?.derivedStale ? h('p', { className: 'vl-note' }, t('history.derivedStale')) : null,
-        expanded ? derived(details?.editedText, t('model.edited')) : null,
-        expanded ? derived(details?.translation, t('live.translation')) : null,
-        expanded ? derived(details?.report, t('studio.report')) : null,
+          h('button', { type: 'button', className: 'vls-mini', onClick: () => foldTranscript(true) }, t('history.foldTranscript')),
+        ) : null,
+        details?.derivedStale && tool === 'report' ? h('p', { className: 'vl-note' }, t('history.derivedStale')) : null,
       );
     }
 
@@ -3018,10 +3426,29 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         root: '', total: 0, nextOffset: null,
       });
       const [reload, setReload] = React.useState(0);
+      const [refreshState, setRefreshState] = React.useState({ running: false, message: '', failed: false });
+      const [refreshVersion, setRefreshVersion] = React.useState(0);
+      const refreshPending = React.useRef(false);
       const [query, setQuery] = React.useState('');
       const [offset, setOffset] = React.useState(0);
       const [copiedId, setCopiedId] = React.useState('');
       const [actionError, setActionError] = React.useState('');
+      const importPicker = React.useRef(null);
+
+      function chooseAudio(event) {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        setQuery('');
+        setOffset(0);
+        void importAudio(() => file, {
+          title: file.name.replace(/\.[^./]+$/, ''),
+          language: state.sourceLanguage,
+          mimeType: importedMime(file),
+          source: 'import',
+        });
+      }
+
 
       React.useEffect(() => {
         void fetchStatus().catch(() => {});
@@ -3045,11 +3472,20 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         [],
       );
 
+      function refreshHistory() {
+        if (refreshPending.current) return;
+        refreshPending.current = true;
+        setRefreshState({ running: true, message: '', failed: false });
+        setReload((value) => value + 1);
+      }
+
       React.useEffect(() => {
         const controller = new AbortController();
+        const manual = refreshPending.current;
         const parameters = new URLSearchParams({ q: query.trim(), limit: '25', offset: String(offset) });
-        const timer = setTimeout(() => {
-          fetch(`${API}/recordings?${parameters}`, { cache: 'no-store', signal: controller.signal })
+        const load = () => {
+          const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]);
+          fetch(`${API}/recordings?${parameters}`, { cache: 'no-store', signal })
             .then(readJsonResponse)
             .then((body) => {
               if (controller.signal.aborted) return;
@@ -3062,16 +3498,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 nextOffset: body.nextOffset,
                 query: query.trim(),
               });
+              if (manual) {
+                refreshPending.current = false;
+                setRefreshVersion((value) => value + 1);
+                setRefreshState({ running: false, message: t('history.refreshed', { n: body.total || 0 }), failed: false });
+              }
             })
             .catch((error) => {
               if (controller.signal.aborted) return;
-              setHistory((previous) => ({
-                ...previous,
-                loading: false,
-                error: messageOf(error),
-              }));
+              setHistory((previous) => ({ ...previous, loading: false, error: messageOf(error) }));
+              if (manual) {
+                refreshPending.current = false;
+                setRefreshState({ running: false, message: t('history.refreshError', { message: messageOf(error) }), failed: true });
+              }
             });
-        }, 160);
+        };
+        let timer;
+        if (manual) load();
+        else timer = setTimeout(load, 160);
         return () => {
           clearTimeout(timer);
           controller.abort();
@@ -3487,6 +3931,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               'div',
               { className: 'vls-head-actions' },
               modelText ? h('span', { className: 'vls-sub' }, modelText) : null,
+              h('input', {
+                ref: importPicker, type: 'file', hidden: true, accept: '.mp3,.wav,.m4a,.flac,.ogg,.opus,.webm',
+                onChange: chooseAudio,
+              }),
+              h('button', {
+                type: 'button', className: 'vl-btn', disabled: state.importing || recording || requesting || finishing,
+                title: t('import.formats'), onClick: () => importPicker.current?.click(),
+              }, t('import.open')),
             ),
           ),
           h(
@@ -3549,10 +4001,19 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   disabled: !state.reportMode && !activeModel(state),
                   title: t('studio.reportHint'), onClick: () => setReportMode(!state.reportMode),
                 }, h(Icon, { name: 'file', size: 14 }), t('studio.report')),
+                h(ReportLanguageSelect, {
+                  t, value: state.reportLanguage, disabled: state.reporting,
+                  setValue: (reportLanguage) => {
+                    store.set({ reportLanguage });
+                    savePrefs({ reportLanguage });
+                  },
+                }),
               ),
               h('p', { className: 'vl-note' }, modelDisclosure(state, t)),
             ),
             h(DictationPreferences, { state, t }),
+            state.importNotice ? h('p', { className: 'vl-note', role: 'status' }, state.importNotice) : null,
+            state.importError ? h('p', { className: 'vls-error', role: 'alert' }, state.importError) : null,
             body,
           ),
           h(
@@ -3578,12 +4039,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   {
                     type: 'button',
                     className: 'vls-mini',
-                    onClick: () => setReload((value) => value + 1),
+                    onClick: refreshHistory,
+                    disabled: refreshState.running,
                   },
-                  t('studio.refresh'),
+                  t(refreshState.running ? 'history.refreshing' : 'studio.refresh'),
                 ),
               ),
             ),
+            refreshState.message ? h('p', {
+              className: refreshState.failed ? 'vls-error' : 'vl-note',
+              role: refreshState.failed ? 'alert' : 'status',
+            }, refreshState.message) : null,
             history.root
               ? h(
                   'div',
@@ -3609,7 +4075,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   h('span', { className: 'vl-spin' }),
                   t('studio.loading'),
                 )
-              : history.error
+              : history.error && history.items.length === 0
                 ? h(
                     'div',
                     { className: 'vls-error' },
@@ -3620,7 +4086,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                       {
                         type: 'button',
                         className: 'vls-mini',
-                        onClick: () => setReload((value) => value + 1),
+                        onClick: refreshHistory,
                       },
                       t('studio.retry'),
                     ),
@@ -3631,7 +4097,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                       'ul',
                       { className: 'vls-list' },
                       history.items.map((item) => h(HistoryItem, {
-                        key: item.id, item, t, query: history.query ?? '', copy, copiedId, removeItem,
+                        key: item.id, item, t, query: history.query ?? '', copy, copiedId, removeItem, importing: state.importing || recording || requesting || finishing,
+                        refreshVersion,
                         onChanged: () => setReload((value) => value + 1),
                       })),
                     ),
@@ -3725,10 +4192,16 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     return {
-      inject: ['slots', 'locale', 'layout'],
+      inject: ['slots', 'locale', 'layout', 'sessions', 'conversation', 'uiWorkspace', 'workspaces'],
       apply(ctx) {
         if (window.location.protocol !== 'dsh-app:' || window.location.host !== 'app') return;
         localeBound = ctx.locale.bind(NS);
+        transcriptSharing = {
+          sessions: ctx.get('sessions'),
+          conversation: ctx.get('conversation'),
+          workspace: ctx.get('uiWorkspace'),
+          workspaces: ctx.get('workspaces'),
+        };
         const style = document.createElement('style');
         style.setAttribute('data-voice-live', '');
         style.textContent = CSS;
@@ -3758,7 +4231,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         );
         ctx.slots.inject('conversation.input.overlay', () =>
           ctx.slots.register(
-            { name: 'conversation.input.overlay', locale: NS },
+            { name: 'conversation.input.overlay', id: 'voice-live', locale: NS },
             LiveOverlay,
           ),
         );

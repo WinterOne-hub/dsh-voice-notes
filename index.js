@@ -276,8 +276,14 @@ const TARGET_LANGUAGES = {
 /** Pick a translation direction when the client asks for automatic. */
 function resolveTarget(text, requested) {
   const code = String(requested ?? '').toLowerCase();
-  if (TARGET_LANGUAGES[code]) return code;
+  if (Object.hasOwn(TARGET_LANGUAGES, code)) return code;
   return looksChinese(text) ? 'en' : 'zh';
+}
+
+function reportLanguage(requested, text) {
+  if (requested === 'Chinese' || requested === 'English') return requested;
+  if (Object.hasOwn(TARGET_LANGUAGES, requested)) return TARGET_LANGUAGES[requested];
+  return looksChinese(text) ? 'Chinese' : 'English';
 }
 
 /** The archive contains private audio; refuse it to non-loopback clients. */
@@ -305,6 +311,8 @@ function publicRecording(meta, summary = false, query = '') {
     duration: Math.round(duration * 10) / 10,
     status: recordingStatus(meta),
     hasCorrections: correctedText !== undefined,
+    hasTranscript: Boolean((correctedText ?? rawText).trim()),
+    hasReport: Boolean(meta.report),
     ...(summary && term && segments ? {
       matchingSegments: segments.filter((part) => [part.text, part.correction].some(
         (value) => typeof value === 'string' && value.toLowerCase().includes(term),
@@ -604,6 +612,8 @@ export async function apply(ctx, config) {
         mimeType: body.mimeType,
         language: String(body.language ?? 'auto').slice(0, 20),
         providerId: String(body.providerId ?? '').slice(0, 200),
+        title: typeof body.title === 'string' ? body.title.slice(0, 120) : '',
+        source: body.source,
       });
       writeJson(res, 201, { ok: true, recording: publicRecording(meta) }, method);
       return;
@@ -820,14 +830,13 @@ export async function apply(ctx, config) {
     if (!body.model) throw new HttpError(400, '请先确认本次使用的模型');
     const selection = translationModel(ctx, body.model);
     if (!llm || !selection) throw new HttpError(503, '当前没有可用的默认模型，无法生成会议报告');
-    const language = body.language === 'Chinese' || body.language === 'English'
-      ? body.language : (looksChinese(text) ? 'Chinese' : 'English');
+    const language = reportLanguage(body.language, text);
     const merging = body.mode === 'merge';
     const prompt = [
       merging
         ? `Combine the partial meeting reports below into one concise report in ${language}. Deduplicate repeated items.`
         : `Read the meeting transcript below and write a concise, well-structured meeting report in ${language}.`,
-      'Return Markdown only, with exactly these sections:',
+      'Return Markdown only with these sections. Translate their headings and content into the requested language:',
       '# Meeting Report',
       '## Summary (2-4 sentences)',
       '## Key Points (bullet list)',
@@ -846,7 +855,7 @@ export async function apply(ctx, config) {
     });
     try {
       const raw = await streamText(llm, selection, prompt, controller.signal, {
-        maxTokens: body.mode === 'part' ? 900 : 4000,
+        maxTokens: body.mode === 'part' || body.compact === true ? 900 : 4000,
         system:
           'You are a meticulous meeting scribe. You produce factual, compact meeting reports from raw speech transcripts. ' +
           'You never invent details and you follow the requested output language.',

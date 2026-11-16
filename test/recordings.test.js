@@ -55,7 +55,7 @@ async function fixture(t) {
       state.speechCalls.push(language);
       if (state.wait) await state.wait;
       if (state.fail) throw new Error('test ASR failure');
-      return { text: 'Raw model output' };
+      return { text: state.speechText ?? 'Raw model output' };
     },
   };
   async function registerHost(profile = 'desktop') {
@@ -69,7 +69,10 @@ async function fixture(t) {
         llm: { prepareCall: async () => {
           state.modelCalls += 1;
           if (state.waitModel) await state.waitModel;
-          return { async *stream() { yield { type: 'text-delta', text: 'Edited output' }; } };
+          return { async *stream(options) {
+            state.lastModelInput = options.messages[0].content[0].text;
+            yield { type: 'text-delta', text: 'Edited output' };
+          } };
         } },
       })[name],
       effect: (effect) => effect(),
@@ -183,9 +186,9 @@ test('failed segment can be retried and concurrent derived updates preserve the 
 
 async function bootClient(t, call, preferences = {}) {
   const rawSource = await readFile(new URL('../client.js', import.meta.url), 'utf8');
-  const marker = "    return {\n      inject: ['slots', 'locale', 'layout'],";
-  const source = rawSource.replace(marker,
-    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime };\n' + marker);
+  const source = rawSource.replace(/^    return \{\n      inject: \['slots',/m, (registration) =>
+    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection };\n' + registration);
+  assert.notEqual(source, rawSource, 'The test harness must expose the client factory helpers');
   const methods = { connect() {}, disconnect() {} };
   const stream = { getTracks: () => [] };
   class AudioContext {
@@ -194,6 +197,14 @@ async function bootClient(t, call, preferences = {}) {
     createMediaStreamSource() { return methods; }
     createGain() { return { ...methods, gain: {} }; }
     createScriptProcessor() { return { ...methods }; }
+  }
+  class OfflineAudioContext {
+    async decodeAudioData() {
+      return {
+        sampleRate: 16000, numberOfChannels: 2, length: 480000, duration: 30,
+        getChannelData: () => new Float32Array(480000),
+      };
+    }
   }
   class MediaRecorder extends EventTarget {
     mimeType = 'audio/webm';
@@ -214,7 +225,7 @@ async function bootClient(t, call, preferences = {}) {
   }
   const body = new Element();
   const sandbox = {
-    AbortController, AbortSignal, Blob, MediaRecorder, URLSearchParams, btoa,
+    AbortController, AbortSignal, Blob, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
     setInterval, clearInterval, setTimeout, clearTimeout,
     document: { body, createElement: () => new Element() },
     navigator: { mediaDevices: { getUserMedia: async () => stream } },
@@ -456,4 +467,126 @@ test('startup migrates old file permissions and refuses linked media', async (t)
   await registerHost();
   assert.equal((await call(`${API}/recordings/${original.id}/audio`)).status, 404);
   assert.equal((await stat(outside)).mode & 0o777, 0o644);
+});
+
+test('file import persists audio and timestamps and re-transcription keeps the earlier corrected entry', async (t) => {
+  const { call, dataRoot, state } = await fixture(t);
+  const { store, importAudio, importedMime } = await bootClient(t, call);
+  const audio = new Blob(['fixture audio bytes'], { type: 'audio/flac' });
+  const mimeType = importedMime({ name: 'Sample.FLAC' });
+  assert.equal(mimeType, 'audio/flac');
+  assert.equal(importedMime({ name: 'Sample.exe' }), null);
+  const id = await importAudio(() => audio, { title: 'Imported test', mimeType, language: 'en', source: 'import' });
+  const path = `${API}/recordings/${id}`;
+  const { data } = await call(path);
+  assert.equal(data.recording.status, 'complete');
+  assert.equal(data.recording.title, 'Imported test');
+  assert.deepEqual(data.recording.segments.map(({ start, end }) => [start, end]), [[0, 28], [28, 30]]);
+  assert.equal((await call(`${path}/audio`)).data.toString(), 'fixture audio bytes');
+  assert.equal((await call(`${path}/audio`)).headers['content-type'], 'audio/flac');
+  await call(`${path}/segments/0`, 'PATCH', { correction: 'Earlier corrected text' });
+  state.speechText = 'New transcript';
+  const newId = await importAudio(() => audio, {
+    title: 'Imported test (new transcription)', mimeType, language: 'zh', source: 'retranscription',
+  });
+  assert.notEqual(newId, id);
+  const archives = await createRecordingStore(join(dataRoot, 'recordings')).list();
+  assert.equal(archives.length, 2);
+  const earlier = archives.find((item) => item.id === id);
+  const newer = archives.find((item) => item.id === newId);
+  assert.equal(earlier.segments[0].correction, 'Earlier corrected text');
+  assert.equal(newer.segments[0].text, 'New transcript');
+  assert.deepEqual(state.speechCalls, ['en', 'en', 'zh', 'zh']);
+  assert.equal(state.modelCalls, 0);
+  assert.equal(store.get().importError, '');
+});
+
+test('reports honor the selected output language without a standalone model question route', async (t) => {
+  const { call, model, state } = await fixture(t);
+  const report = await call(`${API}/report`, 'POST', { text: 'Fixture', language: 'ja', model });
+  assert.equal(report.status, 200);
+  assert.equal(report.data.language, '日本語');
+  assert.match(state.lastModelInput, /日本語/);
+  const { data: { recording } } = await call(`${API}/recordings/live`, 'POST', {});
+  assert.equal((await call(`${API}/recordings/${recording.id}/ask`, 'POST', {
+    question: 'Fixture question', model,
+  })).status, 404);
+  assert.equal(state.modelCalls, 1);
+});
+
+test('transcript sharing creates a separate unsent draft and never overwrites an existing draft', async (t) => {
+  const { call, state } = await fixture(t);
+  const { openTranscriptDraft } = await bootClient(t, call);
+  const events = [];
+  const binding = {};
+  let draft = 'Earlier draft';
+  const services = {
+    sessions: {
+      list: { getSnapshot: () => ({ byId: { active: { updatedAt: 400 } } }) },
+      async create(options) {
+        assert.equal(options.workspaceId, 'recent-workspace');
+        assert.equal(options.sessionId, undefined);
+        events.push('create');
+        return 'fresh-session';
+      },
+      async using(id, options, work) {
+        assert.equal(id, 'fresh-session');
+        assert.equal(options.source, 'controllerOperation');
+        await work({ binding });
+      },
+    },
+    conversation: { input: { requestDraftInitialization(target, options) {
+      assert.equal(target, binding);
+      assert.equal(options.whenDraftExists, 'keep');
+      if (draft) return 'preserved';
+      draft = options.prompt;
+      events.push('draft');
+      return 'applied';
+    } } },
+    workspace: { openSession(id) {
+      assert.equal(id, 'fresh-session');
+      events.push('open');
+    } },
+    workspaces: { list: { getSnapshot: () => ({ phase: 'ready', items: [
+      { workspaceId: 'older-workspace', createdAt: new Date(200).toISOString(), sessionIds: [] },
+      { workspaceId: 'recent-workspace', createdAt: new Date(100).toISOString(), sessionIds: ['active'] },
+    ] }) } },
+  };
+  const tKey = (key, vars) => vars?.title ? `${key} ${vars.title}` : key;
+  const noWorkspace = { ...services, workspaces: { list: { getSnapshot: () => ({ phase: 'ready', items: [] }) } } };
+  await assert.rejects(openTranscriptDraft(noWorkspace, { text: 'Selected line' }, tKey), /share.workspaceRequired/);
+  assert.deepEqual(events, []);
+  await assert.rejects(openTranscriptDraft(services, { text: 'Selected line', title: 'Fixture title', excerpt: true }, tKey));
+  assert.equal(draft, 'Earlier draft');
+  assert.deepEqual(events, ['create']);
+  draft = '';
+  await openTranscriptDraft(services, { text: 'Selected line', title: 'Fixture title', excerpt: true }, tKey);
+  assert.deepEqual(events, ['create', 'create', 'draft', 'open']);
+  assert.match(draft, /Selected line/);
+  assert.match(draft, /share.selectedIntro/);
+  assert.equal(state.modelCalls, 0);
+  draft = '';
+  await openTranscriptDraft(services, { text: 'Full transcript', title: 'Fixture title' }, tKey);
+  assert.match(draft, /Full transcript/);
+  assert.match(draft, /share.intro/);
+});
+
+test('the selection toolbar reads only selected transcript text inside the expanded card', async (t) => {
+  const { call } = await fixture(t);
+  const { readTranscriptSelection } = await bootClient(t, call);
+  const region = {};
+  const inside = { nodeType: 3, parentElement: { closest: () => region } };
+  const outside = { nodeType: 3 };
+  const root = {
+    contains: (node) => node === inside || node === region,
+    getBoundingClientRect: () => ({ top: 10, bottom: 100 }),
+  };
+  const selection = {
+    anchorNode: inside, focusNode: inside, rangeCount: 1, isCollapsed: false,
+    getRangeAt: () => ({ getBoundingClientRect: () => ({ left: 10, right: 20, top: 40, bottom: 50 }) }),
+    toString: () => '  Partial transcript  ',
+  };
+  assert.equal(readTranscriptSelection(root, selection).text, 'Partial transcript');
+  assert.equal(readTranscriptSelection(root, { ...selection, focusNode: outside }), null);
+  assert.equal(readTranscriptSelection(root, { ...selection, isCollapsed: true }), null);
 });

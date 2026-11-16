@@ -1,8 +1,8 @@
 {
   "name": "dsh-voice-notes",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
-  "description": "Local voice dictation and recording history for DeepSeek Harness Desktop",
+  "description": "语音速记 · 录音转文字 / Voice Notes: local audio transcription, meeting summaries, and transcript sharing for DeepSeek Harness Desktop",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -34,7 +34,8 @@
       "inject": [
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-sidebar",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-workspace"
       ]
     }
   },
@@ -49,7 +50,23 @@
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
+    "voice-notes",
     "speech-to-text",
-    "voice-notes"
-  ]
+    "audio-transcription",
+    "asr",
+    "dictation",
+    "meeting-notes",
+    "transcript-search",
+    "语音速记",
+    "录音转写",
+    "语音转文字",
+    "语音识别",
+    "会议纪要",
+    "本地录音"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WinterOne-hub/dsh-voice-notes.git"
+  },
+  "homepage": "https://github.com/WinterOne-hub/dsh-voice-notes#readme"
 }

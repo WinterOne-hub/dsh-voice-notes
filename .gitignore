@@ -3,8 +3,15 @@ node_modules/
 .DS_Store
 .env
 .env.*
+*.key
+*.pem
 *.log
 recordings/
+*.flac
+*.mp3
+*.ogg
+*.opus
+*.pcm
 *.wav
 *.webm
 *.m4a

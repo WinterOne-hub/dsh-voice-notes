@@ -20,6 +20,7 @@ const MIME_EXT = new Map([
   ['audio/wav', 'wav'],
   ['audio/x-wav', 'wav'],
   ['audio/mpeg', 'mp3'],
+  ['audio/flac', 'flac'],
 ]);
 
 /** Recording ids are generated locally and never contain path separators. */
@@ -222,7 +223,7 @@ export function createRecordingStore(directory) {
   }
 
   async function save({ audio, mimeType, text, translation, duration, language, providerId,
-    title, report, diagnostics, live = false }) {
+    title, report, diagnostics, source, live = false }) {
     await ensure();
     const mime = normalizeMime(mimeType);
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -242,6 +243,7 @@ export function createRecordingStore(directory) {
       audioFile,
       size: audioFile ? audio.length : 0,
       title: cleanTitle(title) || defaultTitle(cleanText),
+      ...(source === 'import' || source === 'retranscription' ? { source, customTitle: Boolean(cleanTitle(title)) } : {}),
     };
     if (diagnostics && typeof diagnostics === 'object') {
       meta.diagnostics = {

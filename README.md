@@ -1,6 +1,8 @@
-# 语音速记 / Voice Notes
+# 语音速记 · 录音转文字 / Voice Notes · Audio Transcription
 
-DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧栏工作台录制和回听长录音。SenseVoiceSmall 在本机识别音频。
+[中文](#使用) · [English](#english) · [下载安装包 / Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
+
+DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧栏工作台录制和回听长录音。SenseVoiceSmall 在本机识别音频。支持导入本地录音、录音转写、会议纪要、转写检索和转写分享。
 
 ## 使用
 
@@ -8,9 +10,12 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 - 在「语音速记 → 聊天听写偏好」可关闭「同时保存到录音历史」，也可选择一个在 Harness 窗口内生效的开始／停止快捷键。新安装默认仅插入草稿，快捷键默认关闭。仅插入草稿时，听写音频和转写结果不会写入录音历史。侧栏工作台的录音仍会保存。
 - 录音时，Harness 窗口顶部一直显示计时和「停止」按钮，切换会话或面板也可停止。停录后的状态会分别显示保存和转写进度。
 - 在左侧打开「语音速记」可以录制、查看结果和管理历史。停录后的文字留在工作台。在「录音历史」可搜索标题、原始转写、整理稿、译文或会议报告，也可以重命名、播放和下载音频。展开「转写与时间戳」，点时间跳到音频对应位置，播放时会高亮当前段。有片段命中搜索时，可以点「定位匹配片段」。在片段旁选「校对」可单独保存校对稿，原始转写可随时展开查看。两版均可下载为 TXT。没有时间戳的旧录音支持全文校对和导出。
+- 在工作台点「导入本地录音」，选择 MP3、WAV、M4A、FLAC、OGG、Opus 或 WebM。每个文件最多 128 MiB，且时长不超过 2 小时。插件在本机解码、保存原音频并逐段转写。
+- 对已有录音，在卡片上点「重新转写音频」，再选择识别语言。新转写作为一条独立历史保存，含一份相同的音频；原转写和校对稿可用于对照。
+- 在单条录音里可搜索转写和定位匹配片段。选择「报告语言」可生成总结报告。点「分享到新会话」可将整篇转写带入 Harness 新草稿。在转写里选中文字时，可将选中的片段带入新草稿。卡片的分享、重新转写和报告入口可以直接使用；长转写可在卡片内滚动和收起。
 - 「识别语言」仅传给本机识别引擎。自动识别、中文、英文、粤语、日语和韩语可选。录制期间固定这次录音的识别语言。
 - 在工作台展开「翻译、整理和报告」可使用模型选项。「模型整理」默认关闭，可选择为原始转写生成单独的整理稿。「翻译」在确认录音片段后生成译文，可从输入框或工作台启用。「会议报告」可在工作台设置为停录后自动生成，也可在结果里手动操作。较长的报告按段处理后汇总。
-- 整理、翻译和报告会把转写文字发给界面显示的默认模型。音频只在本机处理和保存。模型许可绑定提供方和模型，改用其他模型需要重新开启相关功能。
+- 整理、翻译和报告会把转写文字发给界面显示的默认模型。分享到新会话会在最近使用的 Harness 工作区创建未发送的草稿，用户可编辑、补充问题和选择模型。音频只在本机处理和保存。模型许可绑定提供方和模型，改用其他模型需要重新开启相关功能。
 
 第一次从未安装模型的环境启动时，插件会提示下载 SenseVoiceSmall，支持进度、取消和切换下载源。macOS 麦克风权限由 DeepSeek Harness 应用持有。
 
@@ -24,11 +29,11 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 
 支持 macOS DeepSeek Harness Desktop，验证的 Host 版本为 0.2.2-rc.3。
 
-1. 下载与本项目源码对应的 `dsh-voice-notes-0.0.1.tgz`。
+1. 从同一版本的 GitHub Release 下载 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`，在下载目录运行 `shasum -a 256 -c SHA256SUMS` 校验安装包。
 2. 打开 Harness 的「插件」，添加该本地压缩包并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在压缩包目录运行：
 
    ```sh
-   dsh plugin --profile desktop add ./dsh-voice-notes-0.0.1.tgz
+   dsh plugin --profile desktop add ./dsh-voice-notes-0.0.2.tgz
    ```
 
 3. 完全退出再打开 Harness，从侧栏打开「语音速记」。如果已安装语音速记的旧本地包，请先卸载旧包再启用新版；两个包提供同一套语音服务和面板。旧录音继续使用同一个本地数据目录。
@@ -44,3 +49,24 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 卸载插件后，模型和录音文件仍保存在上述目录。录音可以在工作台历史中逐条删除。
 
 [隐私与安全说明](PRIVACY.md)
+
+
+## English
+
+Voice Notes brings local speech-to-text to DeepSeek Harness Desktop for macOS. Dictate in chat, record or import audio in the sidebar, and review timestamped transcripts.
+
+### Install
+
+Download `dsh-voice-notes-0.0.2.tgz` and `SHA256SUMS` from the same [GitHub release](https://github.com/WinterOne-hub/dsh-voice-notes/releases). Run `shasum -a 256 -c SHA256SUMS` in the download directory, then add the package on the **Plugins** page, enable it and restart Harness. The verified host is Harness Desktop 0.2.2-rc.3. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+
+### Use Voice Notes
+
+- **Dictate or record.** Use the microphone in chat or open **Voice Notes · Audio Transcription** from the sidebar. Chat dictation inserts into the draft by default. Studio audio is saved as you record.
+- **Import audio.** Use **Import audio file**. Supported containers are MP3, WAV, M4A, FLAC, OGG, Opus and WebM, up to 128 MiB and two hours per file. Harness decodes the file on your device and transcribes it with SenseVoice.
+- **Transcribe an existing recording.** Select **Transcribe audio again** on its history card and choose the recognition language. A separate entry keeps the earlier transcript and corrections available for comparison.
+- **Find, review and export.** Search across history or inside one transcript. Open a matching timestamp to replay it. Corrections can be saved separately and exported as TXT.
+- **Summarize or share.** Pick a report language and generate a summary for the current recording. Use **Share to new conversation** to bring the full transcript into a new Harness draft. Select specific text to share an excerpt. You can edit the draft, choose a model and send it when ready.
+
+The audio stays in the local Harness installation. Reports, translations and model editing send transcript text to the provider shown in the app. Sharing opens an unsent draft in the most recently used Harness workspace with the transcript or the selected excerpt. Harness handles model requests once you send the draft. See [Privacy and Security](PRIVACY.md) for retention and access details.
+
+Run `npm test` to test the package and `npm pack --ignore-scripts` to build a tarball. Licensed under [MIT](LICENSE).

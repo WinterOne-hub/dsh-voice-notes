@@ -1,4 +1,4 @@
 {
-  "title": "Voice Notes",
-  "description": "Continuous live transcription with scene language, optional translation, meeting reports, and recording archive."
+  "title": "Voice Notes · Audio Transcription",
+  "description": "Local speech-to-text for DeepSeek Harness Desktop. Dictate, import audio, search and replay timestamped transcripts, generate multilingual meeting summaries, and share transcripts to a new conversation."
 }
