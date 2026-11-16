@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Writable } from 'node:stream';
@@ -449,7 +449,7 @@ test('private defaults do not carry legacy model consent into new dictation', as
   assert.equal(store.get().reportMode, false);
 });
 
-test('startup migrates old file permissions and refuses linked media', async (t) => {
+test('startup migrates POSIX file permissions and refuses symbolic links', { skip: process.platform === 'win32' }, async (t) => {
   const { call, dataRoot, registerHost } = await fixture(t);
   const root = join(dataRoot, 'recordings');
   const store = createRecordingStore(root);
@@ -469,6 +469,19 @@ test('startup migrates old file permissions and refuses linked media', async (t)
   await registerHost();
   assert.equal((await call(`${API}/recordings/${original.id}/audio`)).status, 404);
   assert.equal((await stat(outside)).mode & 0o777, 0o644);
+});
+
+test('archive playback refuses a file linked to data outside the archive', async (t) => {
+  const { call, dataRoot } = await fixture(t);
+  const store = createRecordingStore(join(dataRoot, 'recordings'));
+  const original = await store.save({ audio: Buffer.alloc(64), mimeType: 'audio/webm' });
+  const saved = join(dataRoot, 'recordings', original.audioFile);
+  const outside = join(dataRoot, 'outside.txt');
+  await writeFile(outside, 'outside the archive');
+  await rm(saved);
+  await link(outside, saved);
+  assert.equal((await call(`${API}/recordings/${original.id}/audio`)).status, 404);
+  assert.equal(await readFile(outside, 'utf8'), 'outside the archive');
 });
 
 test('file import persists audio and timestamps and re-transcription keeps the earlier corrected entry', async (t) => {

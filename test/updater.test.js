@@ -31,8 +31,10 @@ test('the updater checks once, verifies the bytes, and hands the private package
       installs++;
       assert.deepEqual(options, { enabled: true, expected: { name: pkg.name, version: nextVersion } });
       assert.deepEqual(await readFile(path), bytes);
-      assert.equal((await stat(path)).mode & 0o777, 0o600);
-      assert.equal((await stat(join(dataRoot, 'updates'))).mode & 0o777, 0o700);
+      if (process.platform !== 'win32') {
+        assert.equal((await stat(path)).mode & 0o777, 0o600);
+        assert.equal((await stat(join(dataRoot, 'updates'))).mode & 0o777, 0o700);
+      }
       return { bundle: pkg.name, version: nextVersion, application: 'restart-required' };
     } }),
     async fetcher(url, options) {

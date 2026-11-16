@@ -14,10 +14,12 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 - 对已有录音，在卡片上点「重新转写音频」，再选择识别语言。新转写作为一条独立历史保存，含一份相同的音频；原转写和校对稿可用于对照。
 - 在单条录音里可搜索转写和定位匹配片段。选择「报告语言」可生成总结报告。点「分享到新会话」可将整篇转写带入 Harness 新草稿。在转写里选中文字时，可将选中的片段带入新草稿。卡片的分享、重新转写和报告入口可以直接使用；长转写可在卡片内滚动和收起。
 - 「识别语言」仅传给本机识别引擎。自动识别、中文、英文、粤语、日语和韩语可选。录制期间固定这次录音的识别语言。
-- 在工作台展开「翻译、整理和报告」可使用模型选项。「模型整理」默认关闭，可选择为原始转写生成单独的整理稿。「翻译」在确认录音片段后生成译文，可从输入框或工作台启用。「会议报告」可在工作台设置为停录后自动生成，也可在结果里手动操作。较长的报告按段处理后汇总。
+- 在工作台展开「翻译、整理和报告」可使用模型选项。「模型整理」默认关闭，可选择为原始转写生成单独的整理稿。「翻译」可从输入框或工作台启用，译文会在一段话完成转写后出现。「会议报告」可在工作台设置为停录后自动生成，也可在结果里手动操作。较长的报告按段处理后汇总。
 - 整理、翻译和报告会把转写文字发给界面显示的默认模型。分享到新会话会在最近使用的 Harness 工作区创建未发送的草稿，用户可编辑、补充问题和选择模型。音频只在本机处理和保存。模型许可绑定提供方和模型，改用其他模型需要重新开启相关功能。
 
-第一次从未安装模型的环境启动时，插件会提示下载 SenseVoiceSmall，支持进度、取消和切换下载源。macOS 麦克风权限由 DeepSeek Harness 应用持有。
+首次使用时，插件会提示下载 SenseVoiceSmall，支持进度、取消和切换下载源。麦克风权限由系统授予 DeepSeek Harness。Windows 可在「设置 → 隐私和安全性 → 麦克风」中启用桌面应用访问。
+
+原文优先显示临时字幕，识别尝试间隔约 1.3 秒。停顿约 1.4 秒会触发正式转写，连续说话时约每 28 秒切段。正式转写的文字由所选模型翻译，实际等待时间还受本机识别、模型响应和网络影响。
 
 ## 录音保存和恢复
 
@@ -27,9 +29,9 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 
 ## 安装和开发
 
-支持 macOS DeepSeek Harness Desktop，验证的 Host 版本为 0.2.2-rc.3。
+适用于 DeepSeek Harness 桌面端。macOS 已在 Harness 0.2.2-rc.3 上实测。Windows x64 是预览支持，需在支持访问控制的文件系统上使用 Harness 的本机数据目录。
 
-1. 从同一版本的 GitHub Release 下载 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`，在下载目录运行 `shasum -a 256 -c SHA256SUMS` 校验安装包。
+1. 下载目标构建的 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`。在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows PowerShell 中运行 `Get-FileHash .\dsh-voice-notes-0.0.2.tgz -Algorithm SHA256`，与 `SHA256SUMS` 中的哈希比较。
 2. 打开 Harness 的「插件」，添加该本地压缩包并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在压缩包目录运行：
 
    ```sh
@@ -55,11 +57,11 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 
 ## English
 
-Voice Notes brings local speech-to-text to DeepSeek Harness Desktop for macOS. Dictate in chat, record or import audio in the sidebar, and review timestamped transcripts.
+Voice Notes brings local speech-to-text to DeepSeek Harness Desktop. Dictate in chat, record or import audio in the sidebar, and review timestamped transcripts. Verified on macOS. Windows x64 support is in preview.
 
 ### Install
 
-Download `dsh-voice-notes-0.0.2.tgz` and `SHA256SUMS` from the same [GitHub release](https://github.com/WinterOne-hub/dsh-voice-notes/releases). Run `shasum -a 256 -c SHA256SUMS` in the download directory, then add the package on the **Plugins** page, enable it and restart Harness. The verified host is Harness Desktop 0.2.2-rc.3. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+Download the package and its `SHA256SUMS`. On macOS, run `shasum -a 256 -c SHA256SUMS` in the download directory. On Windows, compare `Get-FileHash .\dsh-voice-notes-0.0.2.tgz -Algorithm SHA256` with the recorded hash. Add the package on the **Plugins** page, enable it and restart Harness. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
 
 Voice Notes checks the official GitHub release when you open the studio. You can check again manually. **Update now** downloads and verifies the package, then installs it through the Harness plugin manager. Follow the restart prompt to apply the update. An earlier v0.0.2 build needs a manual installation of the build with the updater first.
 
@@ -70,6 +72,7 @@ Voice Notes checks the official GitHub release when you open the studio. You can
 - **Transcribe an existing recording.** Select **Transcribe audio again** on its history card and choose the recognition language. A separate entry keeps the earlier transcript and corrections available for comparison.
 - **Find, review and export.** Search across history or inside one transcript. Open a matching timestamp to replay it. Corrections can be saved separately and exported as TXT.
 - **Summarize or share.** Pick a report language and generate a summary for the current recording. Use **Share to new conversation** to bring the full transcript into a new Harness draft. Select specific text to share an excerpt. You can edit the draft, choose a model and send it when ready.
+- **Translate as you record.** Interim captions are refreshed when local recognition runs, at least 1.3 seconds apart. A pause of about 1.4 seconds or a roughly 28-second segment triggers final recognition. Translation starts after that segment is transcribed, and its latency depends on the model and network.
 
 The audio stays in the local Harness installation. Reports, translations and model editing send transcript text to the provider shown in the app. Sharing opens an unsent draft in the most recently used Harness workspace with the transcript or the selected excerpt. Harness handles model requests once you send the draft. See [Privacy and Security](PRIVACY.md) for retention and access details.
 

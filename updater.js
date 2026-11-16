@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pkg from './package.json' with { type: 'json' };
+import { protectWindowsDirectory } from './windows-private-directory.js';
 
 const repository = 'WinterOne-hub/dsh-voice-notes';
 const releaseApi = `https://api.github.com/repos/${repository}/releases/latest`;
@@ -95,7 +96,9 @@ async function cachePackage(dataRoot, release, bytes) {
     if (error.code !== 'EEXIST') throw error;
   });
   const info = await lstat(dir);
-  if (!info.isDirectory() || (info.mode & 0o077) !== 0) throw new Error('Unsafe update directory');
+  if (!info.isDirectory()) throw new Error('Unsafe update directory');
+  if (process.platform === 'win32') await protectWindowsDirectory(dir);
+  else if ((info.mode & 0o077) !== 0) throw new Error('Unsafe update directory');
   // Harness saves this path as the install source. Keep the verified tarball available for later profile operations.
   const path = join(dir, `${release.digest}-${release.name}`);
   const temporary = join(dir, `${randomUUID()}.partial`);

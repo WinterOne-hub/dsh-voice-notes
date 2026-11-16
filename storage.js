@@ -6,11 +6,12 @@
  * coming from HTTP is validated before it reaches the filesystem.
  */
 
-import { constants, createReadStream } from 'node:fs';
+import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
+import { protectWindowsDirectory } from './windows-private-directory.js';
 
 /** Audio container accepted for the archive; the value is the stored extension. */
 const MIME_EXT = new Map([
@@ -100,18 +101,50 @@ export function correctedTranscript(meta) {
   return textOf(meta.segments, true);
 }
 
-const PRIVATE_READ = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+const windows = process.platform === 'win32';
+const PRIVATE_READ = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 async function requireDirectory(path) {
   const info = await lstat(path);
   if (!info.isDirectory()) throw new StorageError(404, '录音目录不可用');
 }
 
-async function readArchiveFile(path, encoding) {
+async function archiveFileInfo(path) {
+  const info = await lstat(path, { bigint: true });
+  if (!info.isFile() || info.nlink !== 1n) throw new StorageError(404, '录音文件不存在');
+  return info;
+}
+
+async function openArchiveFile(path) {
+  // Windows lacks O_NOFOLLOW. Compare the opened handle with the direct directory entry.
+  const before = windows ? await archiveFileInfo(path) : null;
   const file = await open(path, PRIVATE_READ);
   try {
-    if (!(await file.stat()).isFile()) throw new StorageError(404, '录音文件不存在');
+    const info = await file.stat({ bigint: true });
+    if (!info.isFile() || info.nlink !== 1n ||
+        (before && (before.dev !== info.dev || before.ino !== info.ino))) {
+      throw new StorageError(404, '录音文件不存在');
+    }
+    return file;
+  } catch (error) {
+    await file.close();
+    throw error;
+  }
+}
+
+async function readArchiveFile(path, encoding) {
+  const file = await openArchiveFile(path);
+  try {
     return await file.readFile(encoding);
+  } finally {
+    await file.close();
+  }
+}
+
+async function* streamArchiveFile(path, start, end) {
+  const file = await openArchiveFile(path);
+  try {
+    yield* file.createReadStream({ start, end, autoClose: false });
   } finally {
     await file.close();
   }
@@ -121,7 +154,7 @@ async function secureFile(path, kind, mode) {
   const file = await open(path, PRIVATE_READ);
   try {
     const info = await file.stat();
-    if (kind === 'directory' ? !info.isDirectory() : !info.isFile()) {
+    if (kind === 'directory' ? !info.isDirectory() : !info.isFile() || info.nlink !== 1) {
       throw new StorageError(404, '录音文件类型无效');
     }
     if ((info.mode & 0o777) !== mode) await file.chmod(mode);
@@ -137,9 +170,17 @@ export function createRecordingStore(directory) {
   const partDir = (id) => join(root, `${id}.parts`);
   const partFile = (id, sequence) => join(partDir(id), `audio-${String(sequence).padStart(9, '0')}`);
   const waveFile = (id, sequence) => join(partDir(id), `segment-${sequence}.wav`);
+  let windowsProtection;
   const ensure = async () => {
     await mkdir(root, { recursive: true, mode: 0o700 });
     await requireDirectory(root);
+    if (windows) {
+      windowsProtection ??= protectWindowsDirectory(root).catch((error) => {
+        windowsProtection = undefined;
+        throw error;
+      });
+      await windowsProtection;
+    }
   };
   const updates = new Map();
 
@@ -206,6 +247,7 @@ export function createRecordingStore(directory) {
       if (error?.code !== 'ENOENT') throw error;
     }
     await ensure();
+    if (windows) return;
     await secureFile(root, 'directory', 0o700);
     for (const entry of await readdir(root, { withFileTypes: true })) {
       const dot = entry.name.indexOf('.');
@@ -432,9 +474,8 @@ export function createRecordingStore(directory) {
         return { size: meta.size };
       }
       try {
-        const info = await lstat(audioPath(meta));
-        if (!info.isFile()) throw new StorageError(404, '录音音频不存在');
-        return info;
+        const info = await archiveFileInfo(audioPath(meta));
+        return { size: Number(info.size) };
       } catch (error) {
         if (error?.code === 'ENOENT') throw new StorageError(404, '录音音频不存在');
         throw error;
@@ -442,18 +483,17 @@ export function createRecordingStore(directory) {
     },
 
     audioStream(meta, { start, end }) {
-      if (!meta.segments) return createReadStream(audioPath(meta), { start, end, flags: PRIVATE_READ });
+      if (!meta.segments) return Readable.from(streamArchiveFile(audioPath(meta), start, end));
       return Readable.from((async function* () {
+        await requireDirectory(partDir(meta.id));
         let offset = 0;
         for (let sequence = 0; sequence < meta.chunkCount && offset <= end; sequence += 1) {
           const file = partFile(meta.id, sequence);
-          const info = await lstat(file);
-          if (!info.isFile()) throw new StorageError(404, '录音分块不存在');
-          const { size } = info;
+          const size = Number((await archiveFileInfo(file)).size);
           const localStart = Math.max(0, start - offset);
           const localEnd = Math.min(size - 1, end - offset);
           if (localStart <= localEnd) {
-            yield* createReadStream(file, { start: localStart, end: localEnd, flags: PRIVATE_READ });
+            yield* streamArchiveFile(file, localStart, localEnd);
           }
           offset += size;
         }

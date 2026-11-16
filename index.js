@@ -774,10 +774,9 @@ export async function apply(ctx, config) {
         res.end();
         return;
       }
-      recordings
-        .audioStream(meta, { start, end })
-        .on('error', () => res.destroy())
-        .pipe(res);
+      const audio = recordings.audioStream(meta, { start, end });
+      res.once('close', () => audio.destroy());
+      audio.on('error', () => res.destroy()).pipe(res);
       return;
     }
 
