@@ -1,7 +1,7 @@
-name: Official Windows Desktop Host smoke test
+name: Windows Desktop meeting smoke test
 on:
   push:
-    branches: [codex/windows-host-smoke]
+    branches: [windows-host-smoke]
 permissions:
   contents: read
 jobs:
@@ -29,23 +29,19 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Official installer exited $($install.ExitCode)" }
           if (!(Test-Path -LiteralPath (Join-Path $desktop 'DeepSeek Harness.exe'))) { throw 'Installed desktop executable missing' }
           echo "VOICE_NOTES_TEST_DESKTOP=$desktop" >> $env:GITHUB_ENV
-      - name: Synthesize offline speech on Windows
-        shell: powershell
-        run: |
-          Add-Type -AssemblyName System.Speech
-          $voice = [System.Speech.Synthesis.SpeechSynthesizer]::new()
-          $format = [System.Speech.AudioFormat.SpeechAudioFormatInfo]::new(
-            16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono
-          )
-          $wav = Join-Path $env:RUNNER_TEMP 'voice-notes-synthetic.wav'
-          try {
-            $voice.SetOutputToWaveFile($wav, $format)
-            $voice.Speak('The blue folder is on the desk. Open the blue folder.')
-          } finally { $voice.Dispose() }
-          "VOICE_NOTES_TEST_WAV=$wav" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Pack and exercise plugin through the real Host
+      - name: Download and verify the public speaker fixture
         shell: pwsh
         run: |
+          $wave = Join-Path $env:RUNNER_TEMP 'four-speakers.wav'
+          curl.exe --fail --silent --show-error --location --connect-timeout 15 --max-time 100 --retry 2 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/0-four-speakers-zh.wav' -o $wave
+          if ($LASTEXITCODE -ne 0) { throw 'Fixture download failed' }
+          if ((Get-FileHash -Algorithm SHA256 $wave).Hash.ToLowerInvariant() -ne 'bedf036caed208386c67b4ef4b11f83d74dd0d420b102163a1c33cd09cde7010') { throw 'Fixture checksum mismatch' }
+          echo "VOICE_NOTES_TEST_WAV=$wave" >> $env:GITHUB_ENV
+      - name: Test the plugin and run the meeting smoke test
+        shell: pwsh
+        run: |
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Plugin tests failed' }
           npm pack --ignore-scripts
           if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
-          node scripts/windows-host-smoke.mjs
+          node scripts/meeting-host-smoke.mjs dsh-voice-notes-0.0.2.tgz $env:VOICE_NOTES_TEST_WAV

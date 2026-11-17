@@ -19,6 +19,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRecordingStore, correctedTranscript, extensionFor, normalizeMime, recordingStatus, StorageError } from './storage.js';
 import { createUpdater, UpdateError } from './updater.js';
+import { createMeetingEngine, formatMeeting, MeetingError, MEETING_SECONDS, MAX_SPEAKERS, PCM_RATE, planTurns } from './meeting.js';
 
 /** Prefix shared by every route this plugin owns. */
 const API = '/api/voice-live';
@@ -298,7 +299,7 @@ function isLoopback(address) {
 
 /** Public recording shape with the two same-origin media URLs. */
 function publicRecording(meta, summary = false, query = '') {
-  const { chunkCount, lastCaptureAt, customTitle, segments, correction, ...recording } = meta;
+  const { chunkCount, lastCaptureAt, customTitle, segments, correction, meeting, ...recording } = meta;
   const pcmSeconds = Number(meta.diagnostics?.pcmSamples) > 0
     ? Number(meta.diagnostics.pcmSamples) / 16_000
     : 0;
@@ -320,6 +321,7 @@ function publicRecording(meta, summary = false, query = '') {
       )).length,
     } : {}),
     ...(!summary && correctedText !== undefined ? { correctedText } : {}),
+    ...(meeting ? { hasMeeting: true, ...(!summary ? { meeting } : {}) } : {}),
     ...(segments ? {
       segmentCount: segments.length,
       pendingCount: segments.filter((part) => part.state !== 'ready').length,
@@ -366,13 +368,15 @@ export async function apply(ctx, config) {
   const speechWork = { active: 0, max: 3 };
   const modelWork = { active: 0, max: 3 };
   const setupWork = { active: 0, max: 1 };
+  const meetingEngine = createMeetingEngine(dataRoot);
+  const meetingWork = { active: 0, max: 1 };
   const updater = createUpdater({
     dataRoot,
     getManager: () => {
       const manager = ctx.get('pluginManager');
       return typeof manager?.installBundle === 'function' ? manager : null;
     },
-    isBusy: () => [archiveWrites, speechWork, modelWork, setupWork].some((work) => work.active > 0),
+    isBusy: () => [archiveWrites, speechWork, modelWork, setupWork, meetingWork].some((work) => work.active > 0),
   });
   let openNonce = 0;
 
@@ -399,12 +403,13 @@ export async function apply(ctx, config) {
       await within(capacity, () => run(req, res, method));
     } catch (error) {
       const updateError = error instanceof UpdateError;
-      const known = error instanceof HttpError || error instanceof StorageError || updateError;
+      const meetingError = error instanceof MeetingError;
+      const known = error instanceof HttpError || error instanceof StorageError || updateError || meetingError;
       const status = known ? error.status : 500;
       if (!known) ctx.logger?.warn?.('voice-live request failed');
       writeJson(res, status, { ok: false, error: {
         message: known ? error.message : '语音速记请求处理失败',
-        ...(updateError ? { code: error.code } : {}),
+        ...(updateError || meetingError ? { code: error.code } : {}),
       } }, method);
     }
   };
@@ -552,6 +557,102 @@ export async function apply(ctx, config) {
     return task;
   }
 
+  // Prepare models only after a separate user action. Processing never fetches models.
+  const meetingModels = handler(async (req, res, method) => {
+    if (method === 'GET' || method === 'HEAD') {
+      writeJson(res, 200, { ok: true, ...await meetingEngine.status() }, method);
+      return;
+    }
+    if (method !== 'POST') throw new HttpError(405, '只支持 GET 或 POST');
+    await within(meetingWork, async () => {
+      const controller = new AbortController();
+      const close = () => controller.abort(new MeetingError('cancelled', 409));
+      const timer = setTimeout(() => controller.abort(new MeetingError('downloadFailed', 504)), 10 * 60_000);
+      res.once('close', close);
+      try {
+        await meetingEngine.prepare(controller.signal);
+        writeJson(res, 200, { ok: true }, method);
+      } finally {
+        clearTimeout(timer);
+        res.off('close', close);
+      }
+    });
+  });
+
+  async function transcribeMeeting(req, res, meta, url) {
+    const revision = Number(url.searchParams.get('revision')) || 0;
+    if ((meta.meeting?.revision ?? 0) !== revision || recordingStatus(meta) === 'recording') {
+      throw new MeetingError('unavailable', 409);
+    }
+    const duration = Number(meta.duration);
+    if (duration > MEETING_SECONDS + 1) throw new MeetingError('tooLong', 413);
+    const info = await recordings.audioStat(meta);
+    if (info.size > 128 * 1024 ** 2) throw new MeetingError('tooLong', 413);
+    const frames = Number(url.searchParams.get('frames'));
+    const count = Number(url.searchParams.get('speakers'));
+    if (!Number.isSafeInteger(count) || count < 0 || count > MAX_SPEAKERS) throw new MeetingError('invalid', 400);
+    if (!Number.isSafeInteger(frames) || frames < PCM_RATE / 2) throw new MeetingError('invalid', 400);
+    if (frames > PCM_RATE * MEETING_SECONDS) throw new MeetingError('tooLong', 413);
+    if (duration > 0 && Math.abs(duration - frames / PCM_RATE) > Math.max(3, duration * 0.02)) {
+      throw new MeetingError('invalid', 400);
+    }
+    requireContentType(req, 'application/octet-stream');
+    const length = frames * 2;
+    const declared = req.headers['content-length'];
+    if (declared !== undefined && Number(declared) !== length) throw new MeetingError('invalid', 400);
+
+    const controller = new AbortController();
+    const close = () => controller.abort(new MeetingError('cancelled', 409));
+    const timer = setTimeout(() => controller.abort(new MeetingError('timeout', 504)), 60 * 60_000);
+    res.once('close', close);
+    const signal = controller.signal;
+    try {
+      const pcm = new ArrayBuffer(length);
+      const bytes = new Uint8Array(pcm);
+      let offset = 0;
+      for await (const chunk of req) {
+        signal.throwIfAborted();
+        if (offset + chunk.length > length) throw new MeetingError('invalid', 400);
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      if (offset !== length) throw new MeetingError('invalid', 400);
+      const result = await meetingEngine.process(pcm, count, signal);
+      const planned = planTurns(result.turns, frames);
+      const turns = [];
+      for (const row of planned.turns) {
+        signal.throwIfAborted();
+        const length = (row.endFrame - row.startFrame) * 2;
+        let text = '';
+        if (length >= PCM_RATE / 10) {
+          const wave = canonicalWave(Buffer.from(result.pcm), row.startFrame * 2, length);
+          try {
+            const spec = speech.resolve({ audio: new Uint8Array(wave), language: meta.language || 'auto' });
+            const outcome = await within(speechWork, () => speech.transcribe(spec,
+              AbortSignal.any([signal, AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS)])));
+            text = String(outcome?.text ?? '').trim().slice(0, 20_000);
+          } catch (error) {
+            if (signal.aborted || error instanceof HttpError) throw error;
+            throw new MeetingError('transcriptionFailed', 502);
+          }
+        }
+        if (!text && !row.overlap) continue;
+        turns.push({
+          id: turns.length + 1, start: row.startFrame / PCM_RATE, end: row.endFrame / PCM_RATE,
+          speakerId: row.speakerId, overlap: row.overlap, text,
+        });
+      }
+      if (!turns.some((row) => row.text)) throw new MeetingError('noSpeech', 422);
+      signal.throwIfAborted();
+      // Keep all detected speakers available when a user sets the label of an overlap.
+      const speakers = planned.speakers;
+      return recordings.saveMeeting(meta.id, { revision: revision + 1, speakers, turns }, revision);
+    } finally {
+      clearTimeout(timer);
+      res.off('close', close);
+    }
+  }
+
   const recordingsHandler = handler(async (req, res, method) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const base = `${API}/recordings`;
@@ -646,13 +747,49 @@ export async function apply(ctx, config) {
       return;
     }
 
+    if (rest.length === 2 && rest[1] === 'meeting') {
+      if (method === 'POST') {
+        const meta = await within(meetingWork, async () => transcribeMeeting(req, res, await recordings.get(id), url));
+        writeJson(res, 201, { ok: true, recording: publicRecording(meta) }, method);
+        return;
+      }
+      if (method === 'PATCH') {
+        const patch = await readJson(req, 128 * 1024);
+        const positive = (value) => Number.isSafeInteger(value) && value > 0;
+        if (!positive(patch.revision)) throw new MeetingError('invalid', 400);
+        if (patch.kind === 'speaker') {
+          if (!positive(patch.speakerId) || typeof patch.name !== 'string' || patch.name.length > 80) {
+            throw new MeetingError('invalid', 400);
+          }
+          patch.name = patch.name.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
+        } else if (patch.kind === 'turn') {
+          if (!positive(patch.turnId) ||
+              (patch.speakerId !== undefined && patch.speakerId !== null && !positive(patch.speakerId)) ||
+              (patch.correction !== undefined && patch.correction !== null &&
+                (typeof patch.correction !== 'string' || patch.correction.length > 20_000))) {
+            throw new MeetingError('invalid', 400);
+          }
+          if (typeof patch.correction === 'string') patch.correction = patch.correction.trim();
+        } else {
+          throw new MeetingError('invalid', 400);
+        }
+        const meta = await recordings.editMeeting(id, patch);
+        writeJson(res, 200, { ok: true, recording: publicRecording(meta) }, method);
+        return;
+      }
+      throw new HttpError(405, '只支持 POST 或 PATCH');
+    }
+
     if (rest.length === 2 && rest[1] === 'transcript') {
       if (method !== 'GET' && method !== 'HEAD') throw new HttpError(405, '只支持 GET');
       const meta = await recordings.get(id);
-      const corrected = url.searchParams.get('variant') === 'corrected';
-      const text = corrected ? correctedTranscript(meta) : meta.text;
-      if (text === undefined) throw new HttpError(404, '还没有校对稿');
-      const suffix = corrected ? 'corrected' : 'original';
+      const variant = url.searchParams.get('variant');
+      const corrected = variant === 'corrected';
+      const meeting = variant === 'meeting';
+      const text = meeting ? meta.meeting && formatMeeting(meta.meeting, url.searchParams.get('locale'))
+        : corrected ? correctedTranscript(meta) : meta.text;
+      if (text === undefined) throw new HttpError(404, '没有可导出的转写');
+      const suffix = meeting ? 'speakers' : corrected ? 'corrected' : 'original';
       const title = String(meta.title || 'voice-notes').replace(/[\u0000-\u001f\u007f/\\:*?"<>|]/g, '-');
       const filename = encodeURIComponent(`${title}-${suffix}.txt`.toWellFormed()).replace(/['()]/g,
         (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -719,6 +856,7 @@ export async function apply(ctx, config) {
           status: body.status,
           duration: Number.isFinite(body.duration) ? body.duration : undefined,
           report: typeof body.report === 'string' ? body.report : undefined,
+          meetingRevision: Number.isSafeInteger(body.meetingRevision) ? body.meetingRevision : undefined,
         });
         writeJson(res, 200, { ok: true, recording: publicRecording(meta) }, method);
         return;
@@ -855,6 +993,7 @@ export async function apply(ctx, config) {
       '## Decisions (bullet list, or "None recorded")',
       '## Action Items (checkbox list with owner/deadline when stated, or "None recorded")',
       'Rules: use only facts from the transcript; do not invent names, numbers, dates or decisions;',
+      'Use speaker names when supplied. Avoid attributing overlap or unassigned text to a specific person;',
       'mark uncertain items as "unclear"; keep the report tight; do not add a preamble or code fence.',
       '',
       merging ? 'Partial reports:' : 'Transcript:',
@@ -912,6 +1051,7 @@ export async function apply(ctx, config) {
 
   const routes = [
     ['/status', status],
+    ['/meeting-models', meetingModels],
     ['/normalize', normalize],
     ['/report', report],
     ['/open', open],

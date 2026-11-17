@@ -7,6 +7,7 @@ import { Readable, Writable } from 'node:stream';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { apply } from '../index.js';
+import { planTurns, PCM_RATE } from '../meeting.js';
 import { createRecordingStore, recordingStatus, STALE_RECORDING_MS } from '../storage.js';
 
 const API = '/api/voice-live';
@@ -391,6 +392,10 @@ test('every voice endpoint requires the signed desktop browser session and rejec
     ['/open-state', 'GET'],
     ['/open', 'POST'],
     ['/update', 'GET'],
+    ['/meeting-models', 'GET'],
+    ['/meeting-models', 'POST'],
+    [`/recordings/${recording.id}/meeting`, 'POST', wave()],
+    [`/recordings/${recording.id}/meeting`, 'PATCH', {}],
     ['/update', 'POST', { version: '0.0.3' }],
     ['/prepare', 'POST', {}],
     ['/cancel', 'POST', {}],
@@ -602,6 +607,58 @@ test('the selection toolbar reads only selected transcript text inside the expan
     toString: () => '  Partial transcript  ',
   };
   assert.equal(readTranscriptSelection(root, selection).text, 'Partial transcript');
+  region.dataset = { meetingPrefix: '[0:23] Speaker 2: ' };
+  assert.equal(readTranscriptSelection(root, selection).text, '[0:23] Speaker 2: Partial transcript');
   assert.equal(readTranscriptSelection(root, { ...selection, focusNode: outside }), null);
   assert.equal(readTranscriptSelection(root, { ...selection, isCollapsed: true }), null);
+});
+
+
+test('speaker boundaries preserve crosstalk, separate silence, and bound transcription input', () => {
+  const plan = planTurns([
+    { start: 39, end: 60, speaker: 8 },
+    { start: 0, end: 3, speaker: 9 },
+    { start: 2, end: 8, speaker: 8 },
+    { start: 9, end: 69, speaker: 8 },
+  ], 68 * PCM_RATE);
+  assert.deepEqual(plan.speakers, [{ id: 1 }, { id: 2 }]);
+  assert.deepEqual(plan.turns.slice(0, 3).map((part) => [
+    part.startFrame / PCM_RATE, part.endFrame / PCM_RATE, part.speakerId, part.overlap,
+  ]), [[0, 2, 1, false], [2, 3, null, true], [3, 8, 2, false]]);
+  assert.equal(plan.turns[3].startFrame, 9 * PCM_RATE);
+  assert.equal(plan.turns.at(-1).endFrame, 68 * PCM_RATE);
+  assert.ok(plan.turns.every((part) => part.endFrame - part.startFrame <= 28 * PCM_RATE));
+});
+
+test('speaker edits and failed replacements preserve the original recording and invalidate stale reports', async (t) => {
+  const { call, dataRoot } = await fixture(t);
+  const store = createRecordingStore(join(dataRoot, 'recordings'));
+  const original = await store.save({ text: 'Original transcript', audio: wave(), duration: 1, mimeType: 'audio/wav' });
+  const path = `${API}/recordings/${original.id}`;
+  const meeting = `${path}/meeting`;
+  await store.saveMeeting(original.id, {
+    revision: 1, speakers: [{ id: 1 }, { id: 2 }],
+    turns: [{ id: 1, start: 0.15, end: 0.95, speakerId: null, overlap: true, text: 'Raw speaker text' }],
+  });
+  assert.equal((await call(meeting, 'PATCH', { revision: 1, kind: 'turn', turnId: 1, speakerId: 3 })).status, 404);
+  const rename = await call(meeting, 'PATCH', { revision: 1, kind: 'speaker', speakerId: 2, name: 'Reviewer' });
+  assert.equal(rename.data.recording.meeting.revision, 2);
+  assert.equal((await call(meeting, 'PATCH', { revision: 1, kind: 'turn', turnId: 1, speakerId: 2 })).status, 409);
+  await call(path, 'PATCH', { report: 'Report at revision 2', meetingRevision: 2 });
+  const edited = await call(meeting, 'PATCH', {
+    revision: 2, kind: 'turn', turnId: 1, speakerId: 2, correction: 'Reviewed content',
+  });
+  assert.equal(edited.data.recording.meetingReportStale, true);
+  assert.equal(edited.data.recording.meeting.turns[0].text, 'Raw speaker text');
+  assert.equal(edited.data.recording.text, 'Original transcript');
+  assert.equal((await call(`${path}/transcript?variant=meeting&locale=en`)).data.toString(),
+    '[00:00:00] Reviewer: Reviewed content');
+  const list = await call(`${API}/recordings?limit=10&q=Reviewed+content`);
+  assert.equal(list.data.recordings[0].hasMeeting, true);
+  assert.equal(list.data.recordings[0].meeting, undefined);
+  const failed = await call(meeting + '?frames=16000&speakers=2&revision=3', 'POST', Buffer.alloc(8));
+  assert.equal(failed.status, 400);
+  assert.equal((await call(path)).data.recording.meeting.revision, 3);
+  assert.equal((await call(`${path}/transcript`)).data.toString(), 'Original transcript');
+  assert.equal((await call(path + '/audio')).data.length, wave().length);
 });

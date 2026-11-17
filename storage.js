@@ -339,7 +339,9 @@ export function createRecordingStore(directory) {
         }
         if (meta.segments && !meta.size && !meta.segments.length && recordingStatus(meta) !== 'recording') continue;
         if (term && ![meta.title, meta.text, correctedTranscript(meta), meta.editedText, meta.translation, meta.report]
-          .some((value) => String(value ?? '').toLowerCase().includes(term))) continue;
+          .some((value) => String(value ?? '').toLowerCase().includes(term)) &&
+          !meta.meeting?.speakers.some((speaker) => speaker.name?.toLowerCase().includes(term)) &&
+          !meta.meeting?.turns.some((part) => (part.correction ?? part.text).toLowerCase().includes(term))) continue;
         items.push(meta);
       }
       return items.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
@@ -436,8 +438,47 @@ export function createRecordingStore(directory) {
       });
     },
 
+    saveMeeting(id, meeting, revision = 0) {
+      return change(id, (meta) => {
+        if ((meta.meeting?.revision ?? 0) !== revision) throw new StorageError(409, '多人转写已变更，请刷新');
+        if (recordingStatus(meta) === 'recording') throw new StorageError(409, '录音仍在进行');
+        meta.meeting = meeting;
+        if (meta.report) meta.meetingReportStale = true;
+      });
+    },
+
+    editMeeting(id, patch) {
+      return change(id, (meta) => {
+        const meeting = meta.meeting;
+        if (!meeting) throw new StorageError(404, '多人转写不存在');
+        if (meeting.revision !== patch.revision) throw new StorageError(409, '多人转写已变更，请刷新');
+        if (patch.kind === 'speaker') {
+          const speaker = meeting.speakers.find(({ id }) => id === patch.speakerId);
+          if (!speaker) throw new StorageError(404, '说话人不存在');
+          speaker.name = patch.name;
+        } else {
+          const turn = meeting.turns.find(({ id }) => id === patch.turnId);
+          if (!turn) throw new StorageError(404, '发言段不存在');
+          if (patch.speakerId !== undefined) {
+            if (patch.speakerId !== null && !meeting.speakers.some(({ id }) => id === patch.speakerId)) {
+              throw new StorageError(404, '说话人不存在');
+            }
+            turn.speakerId = patch.speakerId;
+          }
+          if (patch.correction === null) delete turn.correction;
+          else if (patch.correction !== undefined) turn.correction = patch.correction;
+        }
+        meeting.revision += 1;
+        if (meta.report) meta.meetingReportStale = true;
+      });
+    },
+
     update(id, patch) {
       return change(id, (meta) => {
+        if (typeof patch.report === 'string' && meta.meeting) {
+          if (patch.meetingRevision === meta.meeting.revision) delete meta.meetingReportStale;
+          else meta.meetingReportStale = true;
+        }
         for (const key of ['translation', 'editedText', 'report']) {
           if (typeof patch[key] === 'string') meta[key] = patch[key].slice(0, 200_000);
         }

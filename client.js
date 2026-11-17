@@ -47,6 +47,7 @@ window.__ModuleLoader__.load({
     };
     const MAX_IMPORT_BYTES = 128 * 1024 ** 2;
     const MAX_IMPORT_SECONDS = 2 * 3600;
+    const MAX_MEETING_SECONDS = 3600;
     const SHORTCUTS = [
       ['off', 'shortcut.off'],
       ['KeyY', 'Ctrl+Shift+Y'],
@@ -104,6 +105,43 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "meeting.mode": "多人会议",
+      "meeting.modeHint": "停录或导入后识别说话人，最长 60 分钟。",
+      "meeting.count": "说话人数",
+      "meeting.auto": "自动",
+      "meeting.locale": "zh",
+      "meeting.action": "识别说话人",
+      "meeting.view": "多人转写",
+      "meeting.again": "重新识别说话人",
+      "meeting.replace": "重新识别会替换这份多人转写及其校对。原始转写和录音会保留。",
+      "meeting.download": "首次使用需从 GitHub 下载约 {size} 的模型。录音在本机处理。现在下载？",
+      "meeting.downloading": "正在下载说话人模型…",
+      "meeting.decoding": "正在读取录音…",
+      "meeting.processing": "正在本机识别说话人并转写…",
+      "meeting.ready": "多人转写已保存。",
+      "meeting.cancelled": "已取消。录音和已有转写已保留。",
+      "meeting.downloadFailed": "模型下载失败，请重试。",
+      "meeting.integrity": "模型校验失败，请重新安装插件或重试下载。",
+      "meeting.cachePermissions": "说话人模型目录权限不符合要求。",
+      "meeting.analysisFailed": "说话人识别失败。原始录音和转写已保留。",
+      "meeting.transcriptionFailed": "本地转写失败，请重试。",
+      "meeting.prepare": "模型未准备好，请重新识别。",
+      "meeting.unsupported": "当前 Harness 安装未提供兼容的说话人识别运行库。",
+      "meeting.unavailable": "录音或转写状态已变更，请刷新后再试。",
+      "meeting.tooLong": "多人转写最多处理 60 分钟、128 MiB 的录音。",
+      "meeting.tooMany": "检测到的说话人数过多，请指定人数后重试。",
+      "meeting.invalid": "录音参数无效或与原音频不符。",
+      "meeting.timeout": "多人转写超时，请重试。",
+      "meeting.noSpeech": "未识别到可转写的语音。",
+      "meeting.speaker": "说话人 {n}",
+      "meeting.unknown": "说话人待确认",
+      "meeting.overlap": "重叠发言，待确认",
+      "meeting.rename": "编辑说话人名称",
+      "meeting.assign": "发言人",
+      "meeting.export": "导出多人转写 TXT",
+      "meeting.emptyTurn": "未识别出文字，可回听校对。",
+      "meeting.reportStale": "说话人或转写有更新，可重新生成报告。",
+      "meeting.hint": "用时间戳回听。抢话、短插话和声音相近时，标签可能有误。",
       dictate: '语音输入（边录边写）',
       'phase.requesting': '正在请求麦克风…',
       'phase.recording': '正在聆听',
@@ -316,6 +354,43 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "meeting.mode": "Multi-speaker meeting",
+      "meeting.modeHint": "Identify speakers after recording or import. Up to 60 minutes.",
+      "meeting.count": "Number of speakers",
+      "meeting.auto": "Auto",
+      "meeting.locale": "en",
+      "meeting.action": "Identify speakers",
+      "meeting.view": "Speaker transcript",
+      "meeting.again": "Identify speakers again",
+      "meeting.replace": "Replace this speaker transcript and its corrections? The original transcript and audio will be kept.",
+      "meeting.download": "Download {size} of model files from GitHub? Audio is processed locally.",
+      "meeting.downloading": "Downloading speaker model…",
+      "meeting.decoding": "Decoding recording…",
+      "meeting.processing": "Identifying speakers and transcribing locally…",
+      "meeting.ready": "Speaker transcript saved.",
+      "meeting.cancelled": "Cancelled. Audio and existing transcripts were kept.",
+      "meeting.downloadFailed": "Model download failed. Try again.",
+      "meeting.integrity": "Model verification failed. Reinstall the plugin or retry the download.",
+      "meeting.cachePermissions": "The speaker model directory permissions are invalid.",
+      "meeting.analysisFailed": "Speaker analysis failed. Audio and the original transcript were kept.",
+      "meeting.transcriptionFailed": "Local transcription failed. Try again.",
+      "meeting.prepare": "The model is unavailable. Run speaker identification again.",
+      "meeting.unsupported": "This Harness installation lacks a compatible speaker runtime.",
+      "meeting.unavailable": "The recording changed. Refresh and try again.",
+      "meeting.tooLong": "Speaker transcription supports recordings up to 60 minutes and 128 MiB.",
+      "meeting.tooMany": "Too many speakers were detected. Set a speaker count and try again.",
+      "meeting.invalid": "Recording parameters do not match the source audio.",
+      "meeting.timeout": "Speaker transcription timed out. Try again.",
+      "meeting.noSpeech": "No speech could be transcribed.",
+      "meeting.speaker": "Speaker {n}",
+      "meeting.unknown": "Unknown speaker",
+      "meeting.overlap": "Overlapping speech — review",
+      "meeting.rename": "Edit speaker names",
+      "meeting.assign": "Speaker",
+      "meeting.export": "Export speaker transcript",
+      "meeting.emptyTurn": "No text recognized. Replay to review.",
+      "meeting.reportStale": "The speaker transcript changed. Generate a new report if needed.",
+      "meeting.hint": "Replay from a timestamp. Labels can be wrong with crosstalk, short turns, or similar voices.",
       dictate: 'Voice input (live transcription)',
       'phase.requesting': 'Requesting microphone…',
       'phase.recording': 'Listening',
@@ -662,6 +737,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-loading { display: flex; align-items: center; gap: 8px; padding: 16px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .vls-input { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1, #aaa); border-radius: 6px; color: inherit; font: inherit; padding: 5px 8px; }
 .vls-search { width: min(100%, 260px); }
+.vls-meeting { display: grid; gap: 8px; margin: 8px 0; }
 .vls-segments { display: grid; gap: 6px; padding: 0; margin: 8px 0; list-style: none; }
 .vls-segment { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #ddd); }
 .vls-segment-text { flex: 1 1 14rem; white-space: pre-wrap; }
@@ -745,6 +821,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       transcribingSegments: 0,
       savedNotice: '',
       importing: false,
+      meetingMode: false,
+      meetingSpeakers: 0,
+      meetingJob: null,
       updating: false,
       importNotice: '',
       importError: '',
@@ -807,6 +886,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       run: null,
       pcmSamples: 0,
       noticeTimer: undefined,
+      meetingAbort: null,
     };
 
     let localeBound;
@@ -1062,7 +1142,111 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return Object.hasOwn(AUDIO_FORMATS, extension) ? AUDIO_FORMATS[extension] : null;
     }
 
-    async function importAudio(load, { title, mimeType, language, source }) {
+    async function analyzeMeeting(recording, speakers, decoded) {
+      if (engine.meetingAbort) return;
+      const controller = new AbortController();
+      engine.meetingAbort = controller;
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(62 * 60_000)]);
+      const update = (phase, error = false, active = true) => {
+        store.set({ meetingJob: { id: recording.id, phase, error, active } });
+      };
+      const fail = (code) => {
+        const error = new Error(translate(`meeting.${code}`));
+        error.code = code;
+        throw error;
+      };
+      const send = (path, options) => fetch(`${API}${path}`, { cache: 'no-store', signal, ...options })
+        .then(readJsonResponse);
+      try {
+        if (!recording.audioUrl) fail('unavailable');
+        if (recording.duration > MAX_MEETING_SECONDS + 1 || recording.size > MAX_IMPORT_BYTES) fail('tooLong');
+        update('decoding');
+        const models = await send('/meeting-models');
+        if (!models.supported) fail('unsupported');
+        if (!models.ready) {
+          if (!window.confirm(translate('meeting.download', { size: formatBytes(models.bytes) }))) {
+            update('cancelled', false, false);
+            return;
+          }
+          update('downloading');
+          await send('/meeting-models', { method: 'POST' });
+        }
+        update('decoding');
+        if (!decoded) {
+          const response = await fetch(recording.audioUrl, { cache: 'no-store', signal });
+          if (!response.ok) fail('unavailable');
+          const context = new OfflineAudioContext(1, 1, SAMPLE_RATE);
+          try {
+            decoded = await context.decodeAudioData(await response.arrayBuffer());
+          } catch (error) {
+            if (signal.aborted) throw error;
+            throw new Error(translate('import.decodeFailed'));
+          }
+        }
+        if (decoded.duration > MAX_MEETING_SECONDS) fail('tooLong');
+        if (decoded.duration < 0.5) fail('noSpeech');
+        const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) => decoded.getChannelData(i));
+        const size = SAMPLE_RATE * 10;
+        const chunks = [];
+        for (let start = 0; start < decoded.length; start += size) {
+          const end = Math.min(start + size, decoded.length);
+          const bytes = new Uint8Array((end - start) * 2);
+          const view = new DataView(bytes.buffer);
+          for (let offset = start; offset < end; offset++) {
+            let value = 0;
+            for (const channel of channels) value += channel[offset] / channels.length;
+            value = Math.max(-1, Math.min(1, value));
+            view.setInt16((offset - start) * 2, Math.round(value * (value < 0 ? 32768 : 32767)), true);
+          }
+          chunks.push(bytes);
+          if (chunks.length % 8 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            signal.throwIfAborted();
+          }
+        }
+        const params = new URLSearchParams({
+          frames: String(decoded.length), speakers: String(speakers), revision: String(recording.meeting?.revision ?? 0),
+        });
+        update('processing');
+        const result = await send(`${archivePath(recording)}/meeting?${params}`, {
+          method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: new Blob(chunks),
+        });
+        update('ready', false, false);
+        store.set((state) => ({ ...state, historyVersion: state.historyVersion + 1 }));
+        return result.recording;
+      } catch (error) {
+        if (controller.signal.aborted) update('cancelled', false, false);
+        else if (signal.aborted) update('timeout', true, false);
+        else update(Object.hasOwn(EN, `meeting.${error.code}`) ? error.code : 'analysisFailed', true, false);
+      } finally {
+        engine.meetingAbort = null;
+      }
+    }
+
+    function SpeakerCount({ value, change, disabled, t }) {
+      return h('label', { className: 'vls-lang' }, t('meeting.count'),
+        h('select', { className: 'vl-select', value, disabled, onChange: (event) => change(Number(event.target.value)) },
+          h('option', { value: 0 }, t('meeting.auto')),
+          Array.from({ length: 12 }, (_, i) => h('option', { key: i + 1, value: i + 1 }, i + 1)),
+        ));
+    }
+
+    function meetingLabel(meeting, turn, t) {
+      if (!turn.speakerId) return t(turn.overlap ? 'meeting.overlap' : 'meeting.unknown');
+      return meeting.speakers.find(({ id }) => id === turn.speakerId)?.name || t('meeting.speaker', { n: turn.speakerId });
+    }
+
+    function meetingPrefix(meeting, turn, t) {
+      return `[${formatTime(turn.start)}] ${meetingLabel(meeting, turn, t)}: `;
+    }
+
+    function recordingText(recording, t) {
+      if (recording.meeting) return recording.meeting.turns
+        .map((turn) => meetingPrefix(recording.meeting, turn, t) + (turn.correction ?? turn.text)).join('\n');
+      return recording.correctedText ?? recording.text ?? '';
+    }
+
+    async function importAudio(load, { title, mimeType, language, source, meetingSpeakers }) {
       const current = store.get();
       if (current.importing || current.updating || ['requesting', 'recording', 'finishing'].includes(current.phase)) return;
       store.set({ importing: true, importNotice: translate('import.reading'), importError: '' });
@@ -1127,7 +1311,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             pending += 1;
           }
         }
-        await writeArchive(path, { method: 'PATCH', json: { status: 'complete', duration: decoded.duration } });
+        const { recording: saved } = await writeArchive(path, {
+          method: 'PATCH', json: { status: 'complete', duration: decoded.duration },
+        });
+        if (meetingSpeakers !== undefined) void analyzeMeeting(saved, meetingSpeakers, decoded);
         store.set({ importNotice: translate(pending ? 'import.partial' : 'import.ready', { n: pending }) });
         return run.id;
       } catch (error) {
@@ -1701,13 +1888,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return parts[0];
     }
 
-    async function generateMeetingReport(text, generation, run = engine.run) {
+    async function generateMeetingReport(text, generation, run = engine.run, meetingRevision) {
       const source = String(text ?? '').trim();
       if (!source) return;
       store.set({ reporting: true, reportError: '' });
       try {
         const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage);
-        await patchArchive(run, { report });
+        await patchArchive(run, { report, meetingRevision });
         if (generation === engine.generation) store.set({ report, reporting: false });
       } catch (error) {
         if (generation === engine.generation) {
@@ -1776,7 +1963,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       engine.finalChain = Promise.resolve();
       engine.run = null;
       const language = store.get().sourceLanguage;
-      const archive = store.get().surface === 'studio' || store.get().dictationHistory;
+      const captureOptions = store.get();
+      const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
+        ? captureOptions.meetingSpeakers : undefined;
+      const archive = captureOptions.surface === 'studio' || captureOptions.dictationHistory;
       const model = store.get().status?.model ?? null;
       store.set({ phase: 'requesting', providerId: provider.id, error: '' });
       let capture;
@@ -1801,6 +1991,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (generation !== engine.generation) return;
         const run = {
           id: recording?.id ?? null,
+          meetingSpeakers,
           localTexts: new Map(),
           language,
           model,
@@ -1889,7 +2080,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const pending = current.pendingSegments;
       if (run.id) store.set((previous) => ({ ...previous, historyVersion: previous.historyVersion + 1 }));
       if (text && current.editMode) void generateEditedText(text, generation, run);
-      if (text && state.surface === 'studio' && current.reportMode) {
+      if (saved && run.meetingSpeakers !== undefined && !run.interrupted) {
+        void analyzeMeeting(saved, run.meetingSpeakers).then((meeting) => {
+          if (meeting && current.reportMode && generation === engine.generation) {
+            void generateMeetingReport(recordingText(meeting, translate), generation, run, meeting.meeting.revision);
+          }
+        });
+      } else if (text && state.surface === 'studio' && current.reportMode) {
         void generateMeetingReport(text, generation, run);
       }
       if (state.surface === 'composer' && text && (!run.id || saved) && !pending && !current.captureWarning &&
@@ -3049,9 +3246,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const anchor = region(selection.anchorNode);
       const focus = region(selection.focusNode);
       const range = selection.getRangeAt(0);
+      const prefix = (block) => block?.dataset?.meetingPrefix || '';
       let text = '';
       if (anchor && anchor === focus && root.contains(anchor)) {
-        text = selection.toString().trim();
+        const selected = selection.toString().trim();
+        if (selected) text = prefix(anchor) + selected;
       } else {
         const pieces = [];
         for (const block of root.querySelectorAll('[data-vls-transcript]')) {
@@ -3065,7 +3264,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             clip.setEnd(range.endContainer, range.endOffset);
           }
           const piece = clip.toString().trim();
-          if (piece) pieces.push(piece);
+          if (piece) pieces.push(prefix(block) + piece);
         }
         text = pieces.join('\n');
       }
@@ -3076,10 +3275,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return { text, x: (rect.left + rect.right) / 2, top: rect.top, bottom: rect.bottom };
     }
 
-    function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion }) {
+    function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion, meetingJob }) {
       const [details, setDetails] = React.useState(null);
       const [expanded, setExpanded] = React.useState(false);
       const [tool, setTool] = React.useState('');
+      const [speakerCount, setSpeakerCount] = React.useState(0);
+      const [meetingEditing, setMeetingEditing] = React.useState(null);
+      const [meetingSearch, setMeetingSearch] = React.useState(null);
       const [moreOpen, setMoreOpen] = React.useState(false);
       const [busy, setBusy] = React.useState('');
       const [error, setError] = React.useState('');
@@ -3097,6 +3299,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const transcriptRoot = React.useRef(null);
       const segmentList = React.useRef(null);
       const cardTop = React.useRef(null);
+      const meetingRoot = React.useRef(null);
       const path = `/recordings/${item.id}`;
       const original = details?.text ?? item.text;
       const text = details?.correctedText ?? original;
@@ -3111,27 +3314,31 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
 
       React.useEffect(() => {
-        if (!expanded && !moreOpen && tool !== 'report') return;
+        if (!expanded && !moreOpen && !['report', 'meeting'].includes(tool)) return;
         const controller = new AbortController();
         fetchDetails(controller.signal)
           .then((recording) => { if (!controller.signal.aborted) setDetails(recording); })
           .catch((failure) => { if (!controller.signal.aborted) setError(messageOf(failure)); });
         return () => controller.abort();
-      }, [expanded, tool, moreOpen, path, refreshVersion, item.status, item.segmentCount, item.pendingCount, item.hasCorrections]);
+      }, [expanded, tool, moreOpen, path, refreshVersion, item.status, item.segmentCount, item.pendingCount, item.hasCorrections, item.hasMeeting, meetingJob?.phase]);
 
       React.useEffect(() => {
-        if (!expanded) {
+        if (!expanded && tool !== 'meeting') {
           setSelection(null);
           return;
         }
-        const update = () => setSelection(readTranscriptSelection(transcriptRoot.current, window.getSelection()));
+        const update = () => {
+          const selected = window.getSelection();
+          setSelection(readTranscriptSelection(meetingRoot.current, selected) ??
+            readTranscriptSelection(transcriptRoot.current, selected));
+        };
         document.addEventListener('selectionchange', update);
         window.addEventListener('scroll', update, true);
         return () => {
           document.removeEventListener('selectionchange', update);
           window.removeEventListener('scroll', update, true);
         };
-      }, [expanded]);
+      }, [expanded, tool]);
 
       React.useEffect(() => {
         if (!jump || jump.term !== term || !expanded || !details?.segments || !segmentList.current) return;
@@ -3188,7 +3395,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           const recording = excerpt ? item : (details ?? await fetchDetails());
           await openTranscriptDraft(transcriptSharing, {
             title: recording.title,
-            text: excerpt ?? recording.correctedText ?? recording.text ?? '',
+            text: excerpt ?? recordingText(recording, t),
             excerpt: Boolean(excerpt),
           }, t);
         });
@@ -3198,13 +3405,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (busy) return;
         void run('report', async () => {
           const recording = details ?? await fetchDetails();
-          const transcript = (recording.correctedText ?? recording.text ?? '').trim();
+          const transcript = recordingText(recording, t).trim();
           if (!transcript) return;
           const model = (await fetchStatus()).model;
           if (!modelKey(model)) throw new Error(t('model.unavailable'));
           if (!window.confirm(t('report.send', { model: `${model.provider} / ${model.model}` }))) return;
           const report = await createMeetingReport(transcript, model, reportLanguage);
-          const { recording: updated } = await request(path, { method: 'PATCH', json: { report } });
+          const { recording: updated } = await request(path, {
+            method: 'PATCH', json: { report, meetingRevision: recording.meeting?.revision },
+          });
           setDetails(updated);
           onChanged();
         });
@@ -3278,9 +3487,108 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         }
       }
 
+      function updateMeeting(patch) {
+        void run('meetingEdit', async () => {
+          const { recording } = await request(`${path}/meeting`, {
+            method: 'PATCH', json: { ...patch, revision: details.meeting.revision },
+          });
+          setDetails(recording);
+          setMeetingEditing(null);
+          onChanged();
+        });
+      }
+
+      function analyze() {
+        void run('meeting', async () => {
+          const recording = await fetchDetails();
+          if (recording.meeting && !window.confirm(t('meeting.replace'))) return;
+          const result = await analyzeMeeting(recording, speakerCount);
+          if (result) {
+            setDetails(result);
+            setMeetingEditing(null);
+            onChanged();
+          }
+        });
+      }
+
+      function speakerPanel() {
+        const meeting = details?.meeting;
+        const activeJob = meetingJob?.active;
+        const search = (meetingSearch ?? query).trim();
+        const format = (turn) => meetingLabel(meeting, turn, t);
+        const rows = meeting?.turns.filter((turn) => !search ||
+          [format(turn), turn.correction ?? turn.text].some((value) => value.toLowerCase().includes(search.toLowerCase())));
+        return h('section', { 'aria-label': t('meeting.view'), className: 'vls-meeting' },
+          h('div', { className: 'vls-options-row' },
+            h(SpeakerCount, { value: speakerCount, change: setSpeakerCount, disabled: activeJob || Boolean(busy), t }),
+            h('button', { type: 'button', className: 'vls-mini', disabled: importing || activeJob || Boolean(busy), onClick: analyze },
+              t(meeting ? 'meeting.again' : 'meeting.action')),
+            meeting ? h('a', { className: 'vls-mini', download: true,
+              href: `${API}${path}/transcript?variant=meeting&locale=${t('meeting.locale') === 'en' ? 'en' : 'zh'}` },
+              t('meeting.export')) : null,
+          ),
+          meeting ? h(React.Fragment, null,
+            h('p', { className: 'vl-note' }, t('meeting.hint')),
+            h('details', null,
+              h('summary', { className: 'vl-note' }, t('meeting.rename')),
+              meeting.speakers.map((speaker) => h('form', { key: speaker.id, className: 'vls-options-row',
+                onSubmit: (event) => {
+                  event.preventDefault();
+                  const name = String(new FormData(event.currentTarget).get('name') ?? '');
+                  updateMeeting({ kind: 'speaker', speakerId: speaker.id, name });
+                },
+              },
+                h('label', { className: 'vls-lang' }, t('meeting.speaker', { n: speaker.id }),
+                  h('input', { key: speaker.name ?? '', name: 'name', className: 'vls-input',
+                    maxLength: 80, defaultValue: speaker.name ?? '' })),
+                h('button', { type: 'submit', className: 'vls-mini', disabled: Boolean(busy) }, t('history.save')),
+              )),
+            ),
+            h('input', { type: 'search', className: 'vls-input vls-search', value: meetingSearch ?? query, maxLength: 200,
+              'aria-label': t('history.searchThis'), placeholder: t('history.searchThis'),
+              onChange: (event) => setMeetingSearch(event.target.value) }),
+            h('div', { className: 'vls-transcript-open', ref: meetingRoot, tabIndex: 0, 'aria-label': t('meeting.view') },
+              h('ol', { className: 'vls-segments' }, rows.map((turn) =>
+                h('li', { className: 'vls-segment', key: turn.id },
+                  h('button', { type: 'button', className: 'vls-mini vls-seek', onClick: () => seek(turn.start) },
+                    `${formatTime(turn.start)}–${formatTime(turn.end)}`),
+                  h('div', { className: 'vls-segment-text' },
+                    h('strong', null, format(turn)), ' ',
+                    h('span', { 'data-vls-transcript': true, 'data-meeting-prefix': meetingPrefix(meeting, turn, t) },
+                      highlighted(turn.correction ?? turn.text, search) || t('meeting.emptyTurn')),
+                  ),
+                  meetingEditing === turn.id ? h('form', { className: 'vls-correct', onSubmit: (event) => {
+                    event.preventDefault();
+                    const form = new FormData(event.currentTarget);
+                    const assigned = Number(form.get('speaker'));
+                    const correction = String(form.get('correction') ?? '');
+                    updateMeeting({ kind: 'turn', turnId: turn.id, speakerId: assigned || null,
+                      correction: correction === turn.text ? null : correction });
+                  } },
+                    h('label', { className: 'vls-lang' }, t('meeting.assign'),
+                      h('select', { name: 'speaker', className: 'vl-select', defaultValue: turn.speakerId ?? 0 },
+                        h('option', { value: 0 }, t('meeting.unknown')),
+                        meeting.speakers.map((speaker) => h('option', { key: speaker.id, value: speaker.id },
+                          speaker.name || t('meeting.speaker', { n: speaker.id }))),
+                      )),
+                    h('textarea', { rows: 3, className: 'vls-input', name: 'correction',
+                      'aria-label': t('history.correction'), maxLength: 20_000, defaultValue: turn.correction ?? turn.text }),
+                    h('div', { className: 'vls-item-actions' },
+                      h('button', { type: 'submit', className: 'vls-mini', disabled: Boolean(busy) }, t('history.save')),
+                      h('button', { type: 'button', className: 'vls-mini', onClick: () => setMeetingEditing(null) }, t('studio.cancel')),
+                    ),
+                  ) : h('button', { type: 'button', className: 'vls-mini', disabled: Boolean(busy),
+                    onClick: () => setMeetingEditing(turn.id) }, t('history.correct')),
+                ),
+              )),
+            ),
+          ) : null,
+        );
+      }
+
       const active = item.status === 'recording';
       const hasDetails = Boolean(original || text || item.segmentCount > 0 || item.hasCorrections);
-      const hasTranscript = details ? Boolean(text.trim()) : (item.hasTranscript ?? Boolean(text));
+      const hasTranscript = details?.meeting || item.hasMeeting || (details ? Boolean(text.trim()) : (item.hasTranscript ?? Boolean(text)));
       const matches = details?.segments?.filter(segmentMatches).length ?? 0;
 
       function retranscribe() {
@@ -3321,6 +3629,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             type: 'button', className: 'vls-mini', 'data-primary': 'true', disabled: Boolean(busy),
             onClick: () => share(),
           }, t(busy === 'share' ? 'share.preparing' : 'share.transcript')) : null,
+          !active && item.audioUrl ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'meeting',
+            onClick: () => setTool(tool === 'meeting' ? '' : 'meeting'),
+          }, t(item.hasMeeting || details?.meeting ? 'meeting.view' : 'meeting.action')) : null,
           !active && item.audioUrl ? h('button', {
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
             disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
@@ -3367,6 +3679,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           onSeeking: (event) => syncPlayback(event.currentTarget),
           onPlay: (event) => syncPlayback(event.currentTarget),
         }) : null,
+        tool === 'meeting' ? speakerPanel() : null,
         tool === 'transcribe' ? h('div', { className: 'vls-options-row' },
           h('label', { className: 'vls-lang' }, t('language.title'),
             h('select', { className: 'vl-select', value: recognitionLanguage, disabled: importing,
@@ -3441,6 +3754,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               original && !active ? correctionControls('whole', details.text, details.correctedText) : null,
             ),
           ),
+          h('button', { type: 'button', className: 'vls-mini', onClick: () => foldTranscript(true) }, t('history.foldTranscript')),
+        ) : null,
           selection ? h('div', { className: 'vls-share-selection', style: {
             left: Math.max(138, Math.min(window.innerWidth - 138, selection.x)),
             top: selection.top >= 52 ? selection.top - 40 : Math.max(8, Math.min(window.innerHeight - 44, selection.bottom + 4)),
@@ -3449,15 +3764,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               onMouseDown: (event) => event.preventDefault(), onClick: () => share(selection.text) },
               t(busy === 'share' ? 'share.preparing' : 'share.selection')),
           ) : null,
-          h('button', { type: 'button', className: 'vls-mini', onClick: () => foldTranscript(true) }, t('history.foldTranscript')),
-        ) : null,
+        details?.meetingReportStale && tool === 'report' ? h('p', { className: 'vl-note' }, t('meeting.reportStale')) : null,
         details?.derivedStale && tool === 'report' ? h('p', { className: 'vl-note' }, t('history.derivedStale')) : null,
       );
     }
 
     function UpdateControl({ state, t }) {
       const [view, setView] = React.useState({ state: 'checking' });
-      const busy = state.importing || state.retrySaving || state.preparing || state.reporting ||
+      const busy = state.importing || state.retrySaving || state.preparing || state.reporting || state.meetingJob?.active ||
         state.editing || state.translating || ['requesting', 'recording', 'finishing'].includes(state.phase);
 
       async function check(refresh = false) {
@@ -3541,6 +3855,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           language: state.sourceLanguage,
           mimeType: importedMime(file),
           source: 'import',
+          meetingSpeakers: state.meetingMode ? state.meetingSpeakers : undefined,
         });
       }
 
@@ -4032,7 +4347,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 onChange: chooseAudio,
               }),
               h('button', {
-                type: 'button', className: 'vl-btn', disabled: state.importing || state.updating || recording || requesting || finishing,
+                type: 'button', className: 'vl-btn', disabled: state.importing || state.updating || recording || requesting || finishing || (state.meetingMode && state.meetingJob?.active),
                 title: t('import.formats'), onClick: () => importPicker.current?.click(),
               }, t('import.open')),
             ),
@@ -4049,7 +4364,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button',
                   className: 'vls-mic',
                   'data-recording': recording ? 'true' : 'false',
-                  disabled: phase === 'setup' || finishing,
+                  disabled: phase === 'setup' || finishing || (state.meetingMode && state.meetingJob?.active && !recording),
                   title: recording
                     ? t('studio.stop')
                     : requesting || finishing
@@ -4087,6 +4402,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 ),
               ),
             ),
+            h('div', { className: 'vls-options-row' },
+              h('label', { className: 'vls-lang' },
+                h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
+                  onChange: (event) => store.set({ meetingMode: event.target.checked }) }),
+                t('meeting.mode'),
+              ),
+              state.meetingMode ? h(SpeakerCount, { t, value: state.meetingSpeakers,
+                disabled: recording || requesting || finishing || state.importing,
+                change: (meetingSpeakers) => store.set({ meetingSpeakers }),
+              }) : null,
+              state.meetingMode ? h('span', { className: 'vl-note' }, t('meeting.modeHint')) : null,
+            ),
+            state.meetingJob ? h('div', { className: 'vls-options-row', role: 'status' },
+              h('span', { className: state.meetingJob.error ? 'vls-error' : 'vl-note' }, t(`meeting.${state.meetingJob.phase}`)),
+              state.meetingJob.active ? h('button', { type: 'button', className: 'vls-mini',
+                onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
+            ) : null,
             h('details', { className: 'vls-options' },
               h('summary', null, t('recording.options')),
               h('div', { className: 'vls-options-row' },
@@ -4194,7 +4526,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                       { className: 'vls-list' },
                       history.items.map((item) => h(HistoryItem, {
                         key: item.id, item, t, query: history.query ?? '', copy, copiedId, removeItem, importing: state.importing || recording || requesting || finishing,
-                        refreshVersion,
+                        refreshVersion, meetingJob: state.meetingJob,
                         onChanged: () => setReload((value) => value + 1),
                       })),
                     ),

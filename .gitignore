@@ -16,3 +16,4 @@ recordings/
 *.webm
 *.m4a
 *.onnx
+!meeting-models/segmentation.onnx

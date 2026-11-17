@@ -8,6 +8,8 @@
 
 录音归档为明文。macOS 目录使用 `0700`、文件使用 `0600`；Windows 限制为当前用户和系统账户访问。语音接口仅接受 Harness 签发的本机桌面会话。安装包按版本、大小和 SHA-256 校验后交给 Harness 安装。
 
+多人会议在本机区分说话人。只保存当次录音的编号、名称、时间戳和文字，不保存可跨录音匹配的声纹。模型另外存放在 `voice-live/meeting-models`。
+
 可在历史逐条删除录音。卸载保留录音、模型和更新缓存。导出文件、备份和已发出的聊天内容在各自位置管理。
 
 ## English
@@ -17,3 +19,5 @@ Microphone and imported audio are transcribed locally. Studio recordings, import
 Translation, editing and reports send transcript text to the selected model. Sharing creates an unsent Harness draft. Model setup and update checks access their download sources without sending audio, transcript text or personal API credentials.
 
 The archive is unencrypted. Access is restricted by macOS file permissions or Windows ACLs. The API requires an authenticated local Harness Desktop session. Update files are checked before installation. Uninstalling keeps the archive and caches; delete recordings from history.
+
+Speaker analysis runs locally. Speaker numbers, names, timestamps and text are saved with that recording. No voiceprints are retained. The model cache is under `voice-live/meeting-models`.
