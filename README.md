@@ -29,10 +29,15 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 
 ## 安装和开发
 
-适用于 DeepSeek Harness 桌面端。macOS 已在 Harness 0.2.2-rc.3 上实测。Windows x64 是预览支持，需在支持访问控制的文件系统上使用 Harness 的本机数据目录。
+macOS 已在 DeepSeek Harness Desktop 0.2.2-rc.3 上实测。Windows x64 预览已在官方桌面版验证安装、本地语音转写和历史录音回放，实体麦克风仍待真机验证。Windows 需在支持访问控制的文件系统上使用 Harness 的本机数据目录。 [Windows 测试记录](https://github.com/WinterOne-hub/dsh-voice-notes/actions/runs/43909750463)
 
-1. 从 [v0.0.2 发布页](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.2) 下载对应安装包。macOS 下载 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`，运行 `shasum -a 256 -c SHA256SUMS`。Windows 下载 `dsh-voice-notes-0.0.2-windows-x64-preview.tgz` 和 `SHA256SUMS-windows-x64-preview`，运行 `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256`，然后比对文件中的哈希。
-2. 打开 Harness 的「插件」，添加该本地压缩包并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在压缩包目录运行对应命令。
+| 平台 | 安装包 | SHA-256 校验文件 |
+| --- | --- | --- |
+| macOS | [下载安装包](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/dsh-voice-notes-0.0.2.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/SHA256SUMS) |
+| Windows x64 预览 | [下载预览包](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/dsh-voice-notes-0.0.2-windows-x64-preview.tgz) | [SHA256SUMS-windows-x64-preview](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/SHA256SUMS-windows-x64-preview) |
+
+1. 下载对应的安装包和校验文件。macOS 运行 `shasum -a 256 -c SHA256SUMS`。Windows 在 PowerShell 中运行 `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256`，然后比对校验文件中的哈希。
+2. 打开 Harness 的「插件」，直接添加 `.tgz` 并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在下载目录运行对应命令。
 
    ```sh
    dsh plugin --profile desktop add ./dsh-voice-notes-0.0.2.tgz
@@ -65,7 +70,9 @@ Voice Notes brings local speech-to-text to DeepSeek Harness Desktop. Dictate in 
 
 ### Install
 
-Download the package from the [v0.0.2 release](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.2). On macOS, run `shasum -a 256 -c SHA256SUMS`. For the Windows x64 preview, compare `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256` with `SHA256SUMS-windows-x64-preview`. Add the package on the **Plugins** page, enable it, and restart Harness. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+Download the [macOS package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/dsh-voice-notes-0.0.2.tgz) or the [Windows x64 preview](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.2/dsh-voice-notes-0.0.2-windows-x64-preview.tgz) and its checksum from the same release. On macOS, run `shasum -a 256 -c SHA256SUMS`. On Windows, compare `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256` with `SHA256SUMS-windows-x64-preview`. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+
+Installation, local transcription, and archive playback passed on the official Windows desktop build. Physical microphone capture still needs a device test. [Windows test results](https://github.com/WinterOne-hub/dsh-voice-notes/actions/runs/43909750463)
 
 Voice Notes checks the official GitHub release when you open the studio. You can check again manually. **Update now** downloads and verifies the package, then installs it through the Harness plugin manager. Follow the restart prompt to apply the update. An earlier v0.0.2 build needs a manual installation of the build with the updater first.
 
