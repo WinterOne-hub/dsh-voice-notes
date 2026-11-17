@@ -1,26 +1,19 @@
-# 隐私与安全
+# 隐私与安全 / Privacy and Security
 
-## 麦克风和本地识别
+| 数据 | 用途和存放位置 |
+| --- | --- |
+| 麦克风和导入音频 | 录音时申请麦克风权限。SenseVoice 在本机识别音频。工作台录音和导入文件保存于 Harness 数据目录下的 `voice-live/recordings`。聊天听写默认不写入历史。 |
+| 转写、校对、译文和报告 | 原文及衍生文本可保存在本机历史中。启用翻译、整理或报告时，转写文字发给界面显示的模型。分享只创建未发送的 Harness 草稿。 |
+| 模型和安装包 | 首次准备模型会访问模型下载源。版本检查访问公开 GitHub Releases 接口；点击更新才下载安装包。请求不包含录音、转写或个人 API 凭据。 |
 
-- 点击录音或使用已启用的听写快捷键后，插件在 Harness 桌面窗口申请麦克风音频。本机 Harness Host 把音频片段交给 SenseVoice 识别。
-- 首次准备模型时，Harness 会访问所选下载源以获取模型和运行资源。这一步会产生普通网络请求。语音识别阶段的音频在本机桌面进程之间传递。
-- 插件调用已配置的 Harness 服务。插件包中没有个人账号配置、模型凭据、识别权重或录音样例。
+录音归档为明文。macOS 目录使用 `0700`、文件使用 `0600`；Windows 限制为当前用户和系统账户访问。语音接口仅接受 Harness 签发的本机桌面会话。安装包按版本、大小和 SHA-256 校验后交给 Harness 安装。
 
-## 保存、删除和卸载
+可在历史逐条删除录音。卸载保留录音、模型和更新缓存。导出文件、备份和已发出的聊天内容在各自位置管理。
 
-- 新安装的聊天听写默认仅插入草稿。可以在工作台打开「同时保存到录音历史」。工作台录音和导入文件会分块保存到本机。重新转写会创建独立历史并保存一份相同音频。
-- 录音历史包含音频、原始转写，以及用户创建的校对稿、译文、整理稿和会议报告。存放位置是 Harness 数据目录下的 `voice-live/recordings`。macOS 上录音目录以 `0700`、记录文件以 `0600` 保存。Windows 预览使用文件访问控制列表，将目录权限授给当前用户和系统账户，并在加载时检查现有归档中的访问规则。
-- 存储格式为明文，本机账户、具有系统权限的程序或备份可以读取。卸载插件后，归档和 Harness 的模型缓存仍保存在本机。可在历史逐条删除。已导出的文件、系统备份和已发到聊天的文字由各自位置管理。
+## English
 
-## 可选模型处理
+Microphone and imported audio are transcribed locally. Studio recordings, imports, transcripts and related text are kept under `voice-live/recordings` in the Harness data directory. Chat dictation does not write to the archive by default.
 
-- 翻译、模型整理和会议报告默认关闭。启用时界面会显示模型提供方和模型名称。许可与该模型绑定，改用其他模型时相关功能需要重新启用。
-- 这些功能向 Harness 选定的模型发送转写文字。「分享到新会话」会把整篇转写或选中的文字放进 Harness 的新会话草稿。草稿由 Harness 管理，你可以在发送前编辑并选择模型。使用云端模型时，文字会发给相应提供方，并受其保留及处理规则约束。录音音频仍保存在本机。仅插入草稿与模型开关分别控制本机归档和模型处理。
+Translation, editing and reports send transcript text to the selected model. Sharing creates an unsent Harness draft. Model setup and update checks access their download sources without sending audio, transcript text or personal API credentials.
 
-## 访问边界
-
-插件在本机 Harness 桌面环境运行。语音接口要求 Harness 已签发的桌面会话，验证连接地址与来源，并拒绝带转发标记的请求。识别和模型请求设有并发上限。插件与 Harness 内安装的其他代码共享应用信任边界。本机账户的系统权限仍然适用。
-
-## 版本检查与安装
-
-打开工作台或手动检查时，插件向项目的公开 GitHub Releases 接口查询版本。点击「一键更新」才下载并安装。请求不附带账号、API 密钥、录音或转写；GitHub 仍会收到普通连接信息。插件校验 GitHub 提供的 SHA-256 和文件大小，并由 Harness 校验包名、版本与兼容性。已验证的安装包保存在 Harness 数据目录下的 `voice-live/updates`，供插件管理器后续使用。
+The archive is unencrypted. Access is restricted by macOS file permissions or Windows ACLs. The API requires an authenticated local Harness Desktop session. Update files are checked before installation. Uninstalling keeps the archive and caches; delete recordings from history.

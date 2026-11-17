@@ -2,7 +2,7 @@ name: Windows x64 tests
 
 on:
   push:
-    branches: [main, codex/windows-voice-notes]
+    branches: [main, windows-voice-notes]
   pull_request:
 
 permissions:
