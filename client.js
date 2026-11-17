@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.2';
+    const BUILD = '0.0.3';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],

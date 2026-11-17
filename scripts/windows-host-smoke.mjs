@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import pkg from '../package.json' with { type: 'json' };
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -26,7 +27,7 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
     join(runtime,'node_modules','@deepseek-ai','dsh-app-boot','lib','index.js'), profile], { env, encoding: 'utf8', timeout: 25000 });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
   const cli = join(resources, 'runtime', 'cli', 'bin', 'dsh.cmd');
-  const packagePath = resolve('dsh-voice-notes-0.0.2.tgz');
+  const packagePath = resolve(`dsh-voice-notes-${pkg.version}.tgz`);
   const installation = spawnSync('cmd.exe', ['/d', '/s', '/c', `""${cli}" plugin --profile desktop add "${packagePath}" --offline"`],
     { env, encoding: 'utf8', timeout: 35000, windowsVerbatimArguments: true });
   assert.equal(installation.status, 0, installation.stderr || installation.stdout || installation.error?.message);
@@ -65,7 +66,7 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
   assert.deepEqual(Buffer.from(await playback.arrayBuffer()), audio.subarray(0, 9));
   const update = await send('/update');
   assert.equal(update.status, 200);
-  assert.equal((await update.json()).current, '0.0.2');
+  assert.equal((await update.json()).current, pkg.version);
   assert.equal((await send('/recordings/' + id, { method: 'DELETE' })).status, 200);
   console.log('Installed in official Windows Desktop Host; verified signed session, SenseVoice registration, recording archive, Range playback and updater endpoint.');
   const providerId = 'sensevoice-local';

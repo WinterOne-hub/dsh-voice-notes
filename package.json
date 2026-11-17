@@ -1,6 +1,6 @@
 {
   "name": "dsh-voice-notes",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "type": "module",
   "description": "语音速记 · 录音转文字 / Voice Notes: local audio transcription, meeting summaries, and transcript sharing for DeepSeek Harness Desktop",
   "exports": {
