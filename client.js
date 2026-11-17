@@ -3301,6 +3301,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const cardTop = React.useRef(null);
       const meetingRoot = React.useRef(null);
       const path = `/recordings/${item.id}`;
+      const itemMeetingJob = meetingJob?.id === item.id ? meetingJob : null;
       const original = details?.text ?? item.text;
       const text = details?.correctedText ?? original;
       const shownQuery = recordingQuery.trim() || query;
@@ -3320,7 +3321,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           .then((recording) => { if (!controller.signal.aborted) setDetails(recording); })
           .catch((failure) => { if (!controller.signal.aborted) setError(messageOf(failure)); });
         return () => controller.abort();
-      }, [expanded, tool, moreOpen, path, refreshVersion, item.status, item.segmentCount, item.pendingCount, item.hasCorrections, item.hasMeeting, meetingJob?.phase]);
+      }, [expanded, tool, moreOpen, path, refreshVersion, item.status, item.segmentCount, item.pendingCount, item.hasCorrections, item.hasMeeting, itemMeetingJob?.phase]);
 
       React.useEffect(() => {
         if (!expanded && tool !== 'meeting') {
@@ -3679,6 +3680,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           onSeeking: (event) => syncPlayback(event.currentTarget),
           onPlay: (event) => syncPlayback(event.currentTarget),
         }) : null,
+        itemMeetingJob ? h('div', { className: 'vls-options-row', role: 'status' },
+          h('span', { className: itemMeetingJob.error ? 'vls-error' : 'vl-note' }, t(`meeting.${itemMeetingJob.phase}`)),
+          itemMeetingJob.active ? h('button', { type: 'button', className: 'vls-mini',
+            onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
+        ) : null,
         tool === 'meeting' ? speakerPanel() : null,
         tool === 'transcribe' ? h('div', { className: 'vls-options-row' },
           h('label', { className: 'vls-lang' }, t('language.title'),

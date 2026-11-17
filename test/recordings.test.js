@@ -226,7 +226,7 @@ async function bootClient(t, call, preferences = {}) {
   }
   const body = new Element();
   const sandbox = {
-    AbortController, AbortSignal, Blob, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
+    AbortController, AbortSignal, Blob, DataView, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
     setInterval, clearInterval, setTimeout, clearTimeout,
     document: { body, createElement: () => new Element() },
     navigator: { mediaDevices: { getUserMedia: async () => stream } },
@@ -661,4 +661,37 @@ test('speaker edits and failed replacements preserve the original recording and 
   assert.equal((await call(path)).data.recording.meeting.revision, 3);
   assert.equal((await call(`${path}/transcript`)).data.toString(), 'Original transcript');
   assert.equal((await call(path + '/audio')).data.length, wave().length);
+});
+
+
+test('multispeaker import sends bounded PCM only after the original audio is saved', async (t) => {
+  const { call } = await fixture(t);
+  const processing = [];
+  const { store, importAudio } = await bootClient(t, async (url, method, body) => {
+    if (url === `${API}/meeting-models`) {
+      assert.equal(method ?? 'GET', 'GET');
+      return { status: 200, data: { supported: true, ready: true } };
+    }
+    if (url.includes('/meeting?')) {
+      assert.equal(method, 'POST');
+      const endpoint = new URL(url, 'http://localhost');
+      assert.equal(endpoint.searchParams.get('speakers'), '2');
+      assert.equal(endpoint.searchParams.get('frames'), '480000');
+      assert.equal(body.length, 960000);
+      const path = endpoint.pathname.slice(0, -'/meeting'.length);
+      const { data } = await call(path);
+      assert.equal(data.recording.status, 'complete');
+      assert.equal((await call(path + '/audio')).data.toString(), 'original bytes');
+      processing.push(data.recording.id);
+      return { status: 201, data };
+    }
+    return call(url, method, body);
+  });
+
+  const id = await importAudio(() => new Blob(['original bytes']), {
+    title: 'Meeting fixture', mimeType: 'audio/wav', language: 'en', source: 'import', meetingSpeakers: 2,
+  });
+  await waitFor(store, ({ meetingJob }) => !!meetingJob && !meetingJob.active);
+  assert.equal(store.get().meetingJob.phase, 'ready');
+  assert.deepEqual(processing, [id]);
 });
