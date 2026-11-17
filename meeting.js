@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 import { protectWindowsDirectory } from './windows-private-directory.js';
 
@@ -94,6 +95,21 @@ async function download(path, asset, signal) {
   }
 }
 
+async function downloadWithRetry(path, asset, signal) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const request = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+    try {
+      await download(path, asset, request);
+      return;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (error instanceof MeetingError && error.code === 'integrity') throw error;
+      if (attempt === 2) throw new MeetingError('downloadFailed', 502);
+      await delay(750 * (attempt + 1), undefined, { signal });
+    }
+  }
+}
+
 export async function runDiarizer({ addonPath, models, pcm, count, signal }) {
   signal.throwIfAborted();
   const worker = new Worker(new URL('./meeting-worker.js', import.meta.url), {
@@ -152,11 +168,7 @@ export function createMeetingEngine(dataRoot) {
       for (let i = 0; i < models.length; i++) {
         if (!await matches(models[i], ASSETS[i], signal)) {
           if (ASSETS[i].bundled) throw new MeetingError('integrity', 502);
-          try { await download(models[i], ASSETS[i], signal); }
-          catch (error) {
-            if (signal.aborted) throw signal.reason;
-            throw error instanceof MeetingError ? error : new MeetingError('downloadFailed', 502);
-          }
+          await downloadWithRetry(models[i], ASSETS[i], signal);
         }
       }
     },
