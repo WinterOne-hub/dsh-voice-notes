@@ -31,11 +31,15 @@ DeepSeek Harness 桌面插件，支持在聊天输入框听写，也可以在侧
 
 适用于 DeepSeek Harness 桌面端。macOS 已在 Harness 0.2.2-rc.3 上实测。Windows x64 是预览支持，需在支持访问控制的文件系统上使用 Harness 的本机数据目录。
 
-1. 下载目标构建的 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`。在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows PowerShell 中运行 `Get-FileHash .\dsh-voice-notes-0.0.2.tgz -Algorithm SHA256`，与 `SHA256SUMS` 中的哈希比较。
-2. 打开 Harness 的「插件」，添加该本地压缩包并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在压缩包目录运行：
+1. 从 [v0.0.2 发布页](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.2) 下载对应安装包。macOS 下载 `dsh-voice-notes-0.0.2.tgz` 和 `SHA256SUMS`，运行 `shasum -a 256 -c SHA256SUMS`。Windows 下载 `dsh-voice-notes-0.0.2-windows-x64-preview.tgz` 和 `SHA256SUMS-windows-x64-preview`，运行 `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256`，然后比对文件中的哈希。
+2. 打开 Harness 的「插件」，添加该本地压缩包并按提示启用。也可以完全退出桌面应用，使用已安装的 Harness CLI，在压缩包目录运行对应命令。
 
    ```sh
    dsh plugin --profile desktop add ./dsh-voice-notes-0.0.2.tgz
+   ```
+
+   ```powershell
+   dsh plugin --profile desktop add .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz
    ```
 
 3. 完全退出再打开 Harness，从侧栏打开「语音速记」。如果已安装语音速记的旧本地包，请先卸载旧包再启用新版；两个包提供同一套语音服务和面板。旧录音继续使用同一个本地数据目录。
@@ -61,7 +65,7 @@ Voice Notes brings local speech-to-text to DeepSeek Harness Desktop. Dictate in 
 
 ### Install
 
-Download the package and its `SHA256SUMS`. On macOS, run `shasum -a 256 -c SHA256SUMS` in the download directory. On Windows, compare `Get-FileHash .\dsh-voice-notes-0.0.2.tgz -Algorithm SHA256` with the recorded hash. Add the package on the **Plugins** page, enable it and restart Harness. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
+Download the package from the [v0.0.2 release](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.2). On macOS, run `shasum -a 256 -c SHA256SUMS`. For the Windows x64 preview, compare `Get-FileHash .\dsh-voice-notes-0.0.2-windows-x64-preview.tgz -Algorithm SHA256` with `SHA256SUMS-windows-x64-preview`. Add the package on the **Plugins** page, enable it, and restart Harness. If an earlier local Voice Notes package is installed, remove it before enabling this package. Both packages use the same recording archive.
 
 Voice Notes checks the official GitHub release when you open the studio. You can check again manually. **Update now** downloads and verifies the package, then installs it through the Harness plugin manager. Follow the restart prompt to apply the update. An earlier v0.0.2 build needs a manual installation of the build with the updater first.
 
