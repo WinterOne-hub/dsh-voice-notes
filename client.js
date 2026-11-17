@@ -48,6 +48,7 @@ window.__ModuleLoader__.load({
     const MAX_IMPORT_BYTES = 128 * 1024 ** 2;
     const MAX_IMPORT_SECONDS = 2 * 3600;
     const MAX_MEETING_SECONDS = 3600;
+    const SPEAKER_MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx';
     const SHORTCUTS = [
       ['off', 'shortcut.off'],
       ['KeyY', 'Ctrl+Shift+Y'],
@@ -105,6 +106,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "meeting.installModel": "导入模型文件",
+      "meeting.getModel": "下载模型文件",
+      "meeting.installingModel": "正在校验模型文件…",
+      "meeting.modelReady": "模型已安装。可在录音卡片重新识别。",
       "meeting.mode": "多人会议",
       "meeting.modeHint": "停录或导入后识别说话人，最长 60 分钟。",
       "meeting.count": "说话人数",
@@ -354,6 +359,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "meeting.installModel": "Import model file",
+      "meeting.getModel": "Download model file",
+      "meeting.installingModel": "Verifying model file…",
+      "meeting.modelReady": "Model installed. Run speaker identification from the recording card.",
       "meeting.mode": "Multi-speaker meeting",
       "meeting.modeHint": "Identify speakers after recording or import. Up to 60 minutes.",
       "meeting.count": "Number of speakers",
@@ -1218,6 +1227,33 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (controller.signal.aborted) update('cancelled', false, false);
         else if (signal.aborted) update('timeout', true, false);
         else update(Object.hasOwn(EN, `meeting.${error.code}`) ? error.code : 'analysisFailed', true, false);
+      } finally {
+        engine.meetingAbort = null;
+      }
+    }
+
+    async function importMeetingModel(file) {
+      const job = store.get().meetingJob;
+      if (!file || !job || engine.meetingAbort) return;
+      const controller = new AbortController();
+      engine.meetingAbort = controller;
+      const setStatus = (phase, error, active = false) =>
+        store.set({ meetingJob: { ...job, phase, error, active } });
+      setStatus('installingModel', false, true);
+      try {
+        const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]);
+        const status = await fetch(`${API}/meeting-models`, { signal, cache: 'no-store' }).then(readJsonResponse);
+        if (file.size !== status.bytes) {
+          setStatus('integrity', true);
+          return;
+        }
+        await fetch(`${API}/meeting-models`, {
+          method: 'PUT', headers: { 'content-type': 'application/octet-stream' }, body: file, signal,
+        }).then(readJsonResponse);
+        setStatus('modelReady', false);
+      } catch (error) {
+        if (controller.signal.aborted) setStatus('cancelled', false);
+        else setStatus(Object.hasOwn(EN, `meeting.${error.code}`) ? error.code : 'downloadFailed', true);
       } finally {
         engine.meetingAbort = null;
       }
@@ -3849,6 +3885,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const [copiedId, setCopiedId] = React.useState('');
       const [actionError, setActionError] = React.useState('');
       const importPicker = React.useRef(null);
+      const meetingModelPicker = React.useRef(null);
 
       function chooseAudio(event) {
         const file = event.target.files?.[0];
@@ -4424,6 +4461,18 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               h('span', { className: state.meetingJob.error ? 'vls-error' : 'vl-note' }, t(`meeting.${state.meetingJob.phase}`)),
               state.meetingJob.active ? h('button', { type: 'button', className: 'vls-mini',
                 onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
+              ['downloadFailed', 'integrity'].includes(state.meetingJob.phase) ? h(React.Fragment, null,
+                h('a', { className: 'vls-mini', href: SPEAKER_MODEL_URL,
+                  target: '_blank', rel: 'noopener noreferrer' }, t('meeting.getModel')),
+                h('input', { type: 'file', accept: '.onnx', hidden: true, ref: meetingModelPicker,
+                  onChange: (event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = '';
+                    void importMeetingModel(file);
+                  } }),
+                h('button', { type: 'button', className: 'vls-mini',
+                  onClick: () => meetingModelPicker.current?.click() }, t('meeting.installModel')),
+              ) : null,
             ) : null,
             h('details', { className: 'vls-options' },
               h('summary', null, t('recording.options')),

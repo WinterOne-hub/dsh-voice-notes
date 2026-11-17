@@ -33,7 +33,7 @@ macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、�
 
 该功能仅在测试分支的预览构建中提供。
 
-在工作台勾选「多人会议」，再录音或导入文件。字幕仍在录音时显示；说话人标签在录音结束后生成。已有录音可在历史点「识别说话人」。最长 60 分钟，单条音频最多 128 MiB。首次使用会下载约 38 MiB 的模型。
+在工作台勾选「多人会议」，再录音或导入文件。字幕仍在录音时显示；说话人标签在录音结束后生成。已有录音可在历史点「识别说话人」。最长 60 分钟，单条音频最多 128 MiB。首次使用会下载约 38 MiB 的模型。下载失败时可通过工作台导入已下载的 ONNX 文件。
 
 在「多人转写」中可改名、调整单段归属、回听和导出。报告及新会话草稿会带上时间戳和说话人。已知人数时可直接指定；重叠发言需回听核对。在线会议的系统音频需要先另行录制或导出。
 
@@ -64,6 +64,6 @@ Audio is processed and stored locally. Optional translation, editing and reports
 
 Available in preview builds from the test branch.
 
-Enable **Multi-speaker meeting** before recording or importing, or select **Identify speakers** for an existing recording. Speaker labels are added after recording or import. The limit is 60 minutes and 128 MiB. The first run downloads about 38 MiB of model data. Open **Speaker transcript** to rename speakers, correct attribution, replay or export. Reports and shared drafts include timestamps and speaker labels. Set the speaker count when known and review overlapping speech. Import an audio file for online meetings.
+Enable **Multi-speaker meeting** before recording or importing, or select **Identify speakers** for an existing recording. Speaker labels are added after recording or import. The limit is 60 minutes and 128 MiB. The first run downloads about 38 MiB of model data. If the download fails, import the model file in the studio. Open **Speaker transcript** to rename speakers, correct attribution, replay or export. Reports and shared drafts include timestamps and speaker labels. Set the speaker count when known and review overlapping speech. Import an audio file for online meetings.
 
 Run `npm test` to test the plugin and `npm pack --ignore-scripts` to build the installation package.

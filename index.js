@@ -563,14 +563,19 @@ export async function apply(ctx, config) {
       writeJson(res, 200, { ok: true, ...await meetingEngine.status() }, method);
       return;
     }
-    if (method !== 'POST') throw new HttpError(405, '只支持 GET 或 POST');
+    if (method !== 'POST' && method !== 'PUT') throw new HttpError(405, '不支持的方法');
+    if (method === 'PUT') requireContentType(req, 'application/octet-stream');
     await within(meetingWork, async () => {
       const controller = new AbortController();
       const close = () => controller.abort(new MeetingError('cancelled', 409));
       const timer = setTimeout(() => controller.abort(new MeetingError('downloadFailed', 504)), 10 * 60_000);
       res.once('close', close);
       try {
-        await meetingEngine.prepare(controller.signal);
+        if (method === 'PUT') {
+          await meetingEngine.install(req, req.headers['content-length'], controller.signal);
+        } else {
+          await meetingEngine.prepare(controller.signal);
+        }
         writeJson(res, 200, { ok: true }, method);
       } finally {
         clearTimeout(timer);

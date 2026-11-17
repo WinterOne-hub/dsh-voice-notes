@@ -394,6 +394,7 @@ test('every voice endpoint requires the signed desktop browser session and rejec
     ['/update', 'GET'],
     ['/meeting-models', 'GET'],
     ['/meeting-models', 'POST'],
+    ['/meeting-models', 'PUT', wave()],
     [`/recordings/${recording.id}/meeting`, 'POST', wave()],
     [`/recordings/${recording.id}/meeting`, 'PATCH', {}],
     ['/update', 'POST', { version: '0.0.3' }],

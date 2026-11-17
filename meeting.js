@@ -56,43 +56,47 @@ async function matches(path, asset, signal) {
   }
 }
 
-async function download(path, asset, signal) {
+async function persistModel(path, input, asset, signal, status) {
   const partial = `${path}.${randomUUID()}.part`;
   try {
-    const hosts = ['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'];
-    let url = new URL(asset.url);
-    let response;
-    for (let i = 0; i <= 3; i++) {
-      response = await fetch(url, { signal, credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer' });
-      if (![301, 302, 303, 307, 308].includes(response.status)) break;
-      const location = response.headers.get('location');
-      await response.body?.cancel();
-      if (!location || i === 3) throw new MeetingError('downloadFailed', 502);
-      url = new URL(location, url);
-      if (url.protocol !== 'https:' || url.port || url.username || url.password || !hosts.includes(url.hostname)) {
-        throw new MeetingError('downloadFailed', 502);
-      }
-    }
-    if (!response.ok || !response.body) {
-      await response.body?.cancel();
-      throw new MeetingError('downloadFailed', 502);
-    }
     const hash = createHash('sha256');
     let bytes = 0;
     const check = new Transform({
       transform(chunk, _encoding, done) {
         bytes += chunk.length;
-        if (bytes > asset.bytes) return done(new MeetingError('integrity', 502));
+        if (bytes > asset.bytes) return done(new MeetingError('integrity', status));
         hash.update(chunk);
         done(null, chunk);
       },
     });
-    await pipeline(response.body, check, createWriteStream(partial, { flags: 'wx', mode: 0o600 }), { signal });
-    if (bytes !== asset.bytes || hash.digest('hex') !== asset.sha256) throw new MeetingError('integrity', 502);
+    await pipeline(input, check, createWriteStream(partial, { flags: 'wx', mode: 0o600 }), { signal });
+    if (bytes !== asset.bytes || hash.digest('hex') !== asset.sha256) throw new MeetingError('integrity', status);
     await rename(partial, path);
   } finally {
     await rm(partial, { force: true });
   }
+}
+
+async function download(path, asset, signal) {
+  const hosts = ['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'];
+  let url = new URL(asset.url);
+  let response;
+  for (let i = 0; i <= 3; i++) {
+    response = await fetch(url, { signal, credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer' });
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    const location = response.headers.get('location');
+    await response.body?.cancel();
+    if (!location || i === 3) throw new MeetingError('downloadFailed', 502);
+    url = new URL(location, url);
+    if (url.protocol !== 'https:' || url.port || url.username || url.password || !hosts.includes(url.hostname)) {
+      throw new MeetingError('downloadFailed', 502);
+    }
+  }
+  if (!response.ok || !response.body) {
+    await response.body?.cancel();
+    throw new MeetingError('downloadFailed', 502);
+  }
+  await persistModel(path, response.body, asset, signal, 502);
 }
 
 async function downloadWithRetry(path, asset, signal) {
@@ -171,6 +175,13 @@ export function createMeetingEngine(dataRoot) {
           await downloadWithRetry(models[i], ASSETS[i], signal);
         }
       }
+    },
+    async install(input, length, signal) {
+      if (!await supported()) throw new MeetingError('unsupported', 503);
+      const asset = ASSETS[1];
+      if (length !== undefined && Number(length) !== asset.bytes) throw new MeetingError('integrity', 422);
+      await secureCache(true);
+      await persistModel(models[1], input, asset, signal, 422);
     },
     async process(pcm, count, signal) {
       if (!await supported()) throw new MeetingError('unsupported', 503);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -54,11 +54,6 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
     await cp(process.env.VOICE_NOTES_TEST_CACHE, join(root, 'speech-to-text', 'sensevoice'), { recursive: true });
   }
   const cachedMeeting = process.env.VOICE_NOTES_TEST_MEETING_MODEL;
-  if (cachedMeeting) {
-    const modelRoot = join(root, 'voice-live', 'meeting-models');
-    await mkdir(modelRoot, { recursive: true, mode: 0o700 });
-    await copyFile(cachedMeeting, join(modelRoot, 'embedding.onnx'));
-  }
   host = spawn(binary, ['--expose-internals', join(runtime,'node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js'),
     runtime, profile, join(resources, 'runtime/primary-runtime')], { env, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   for (const stream of [host.stderr, host.stdout]) stream.on('data', (data) => { output = (output + data).slice(-20_000); });
@@ -90,8 +85,17 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
 
   const models = await send('/meeting-models', 'GET');
   assert.equal(models.supported, true, 'The Host ships the correct native runtime');
-  assert.equal(models.ready, Boolean(cachedMeeting));
-  await send('/meeting-models', 'POST');
+  assert.equal(models.ready, false);
+  if (cachedMeeting) {
+    const model = await readFile(cachedMeeting);
+    const wrong = Buffer.from(model);
+    wrong[0] ^= 1;
+    assert.equal((await raw('/meeting-models', bytes('/meeting-models', 'PUT', wrong))).status, 422);
+    assert.equal((await send('/meeting-models', 'GET')).ready, false);
+    await json('/meeting-models', bytes('/meeting-models', 'PUT', model));
+  } else {
+    await send('/meeting-models', 'POST');
+  }
   assert.equal((await send('/meeting-models', 'GET')).ready, true);
 
   await send('/prepare', 'POST', { providerId: 'sensevoice-local' });
