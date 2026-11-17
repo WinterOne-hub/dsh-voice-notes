@@ -1,6 +1,6 @@
 # 语音速记 / Voice Notes
 
-DeepSeek Harness Desktop 插件。支持本地听写、录音、文件转写和录音历史。
+DeepSeek Harness 桌面插件，支持本地录音转写、说话人区分、会议纪要和转写检索。适用于 macOS（Apple Silicon）和 Windows x64。
 
 [中文](#安装和开发) · [English](#english) · [Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
 
@@ -41,7 +41,7 @@ v0.0.3 新增。
 
 ## English
 
-Voice Notes is a DeepSeek Harness Desktop plugin for local dictation, recording and transcription.
+Voice Notes provides local audio transcription, speaker diarization, meeting summaries and transcript search for DeepSeek Harness Desktop on macOS Apple Silicon and Windows x64.
 
 ### Install
 

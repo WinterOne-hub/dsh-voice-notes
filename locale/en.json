@@ -1,4 +1,4 @@
 {
   "title": "Voice Notes · Audio Transcription",
-  "description": "Local speech-to-text for DeepSeek Harness Desktop. Dictate, import audio, search and replay timestamped transcripts, generate multilingual meeting summaries, and share transcripts to a new conversation."
+  "description": "Local dictation, audio transcription, speaker diarization, meeting summaries and transcript search for DeepSeek Harness Desktop."
 }
