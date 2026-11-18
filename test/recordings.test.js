@@ -1042,3 +1042,21 @@ test('learning notes honor language and require selected-model confirmation for 
   assert.equal((await call(`${API}/system-audio`, 'POST', { confirmed: false, language: 'en' })).status, 400);
   assert.equal((await call(`${API}/system-audio/not-a-session`, 'DELETE')).status, 404);
 });
+
+test('computer audio confirmation discloses enabled model processing and cancel does not start capture', async (t) => {
+  const { call, model, state } = await fixture(t);
+  let confirmation = '', nativeRequests = 0;
+  const { store, begin, engine } = await bootClient(t, call, {
+    modelPermission: JSON.stringify([model.provider, model.model]), reportMode: true,
+  }, {
+    forbidMicrophone: true,
+    confirm: (message) => { confirmation = message; return false; },
+    fetch(path) { if (path.includes('/system-audio')) nativeRequests++; },
+  });
+  store.set({ captureSource: 'system' });
+  await begin(null, null, false, 'studio');
+  assert.match(confirmation, /test-provider/); assert.match(confirmation, /test-model/);
+  assert.match(confirmation, /转写文字发送/);
+  assert.equal(store.get().phase, 'idle'); assert.equal(engine.capture, null);
+  assert.equal(nativeRequests, 0); assert.equal(state.modelCalls, 0);
+});

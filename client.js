@@ -1774,7 +1774,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ confirmed: true, language }), signal: engine.abort.signal,
       });
-      const session = await readJsonResponse(response);
+      let session;
+      try { session = await readJsonResponse(response); }
+      catch (error) { throw new Error(computerAudioMessage(error.code)); }
       const controller = new AbortController();
       const capture = {
         system: true, recording: session.recording, closed: false,
@@ -2242,7 +2244,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
         ? captureOptions.meetingSpeakers : undefined;
       const computerAudio = captureOptions.surface === 'studio' && captureOptions.captureSource === 'system';
-      if (computerAudio && !window.confirm(translate('system.confirm'))) {
+      if (computerAudio && !window.confirm(translate('system.confirm') +
+        (captureOptions.translate || captureOptions.editMode || captureOptions.reportMode
+          ? '\n\n' + modelDisclosure(captureOptions, translate) : ''))) {
         store.set({ phase: 'idle' }); return;
       }
       const archive = captureOptions.surface === 'studio' || captureOptions.dictationHistory;
@@ -4404,6 +4408,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     function Studio(props) {
       const t = translate;
       const state = useStore();
+      const studioSource = state.surface === 'composer' && ['requesting', 'recording', 'finishing'].includes(state.phase)
+        ? 'microphone' : state.captureSource;
       const [history, setHistory] = React.useState({
         loading: true,
         items: [],
@@ -4604,7 +4610,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const statusText = recording
         ? t('phase.recording')
         : requesting
-          ? t(state.captureSource === 'system' ? 'system.requesting' : 'phase.requesting')
+          ? t(studioSource === 'system' ? 'system.requesting' : 'phase.requesting')
           : finishing
             ? stopFeedback(state, t)
             : phase === 'setup'
@@ -4982,12 +4988,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             h('div', { className: 'vls-options-row' },
               h('label', { className: 'vls-lang' },
                 t('system.source'),
-                h('select', { className: 'vl-select', value: state.captureSource,
+                h('select', { className: 'vl-select', value: studioSource,
                   disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ captureSource: event.target.value }) },
                   h('option', { value: 'microphone' }, t('system.microphone')),
                   h('option', { value: 'system' }, t('system.computer')))),
-              state.captureSource === 'system' ? h('span', { className: 'vl-note' },
+              studioSource === 'system' ? h('span', { className: 'vl-note' },
                 t('system.hint')) : null,
               h('label', { className: 'vls-lang' },
                 h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
@@ -5026,7 +5032,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button', className: 'vl-toggle', 'aria-pressed': state.reportMode,
                   disabled: !state.reportMode && !activeModel(state),
                   title: t('studio.reportHint'), onClick: () => setReportMode(!state.reportMode),
-                }, h(Icon, { name: 'file', size: 14 }), state.captureSource === 'system' ? t('system.report') : t('studio.report')),
+                }, h(Icon, { name: 'file', size: 14 }), studioSource === 'system' ? t('system.report') : t('studio.report')),
                 h(ReportLanguageSelect, {
                   t, value: state.reportLanguage, disabled: state.reporting,
                   setValue: (reportLanguage) => {
@@ -5167,7 +5173,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         const recording = state.phase === 'recording';
         const finishing = state.phase === 'finishing';
         const result = state.phase === 'result' && (state.surface === 'composer' || state.archiveStage === 'failed' || state.savedNotice);
-        const text = recording ? translate('recording.live')
+        const text = recording ? (engine.run?.source === 'system' ? translate('system.computer') + ' · ' : '') + translate('recording.live')
           : finishing || result ? stopFeedback(state, translate) : state.savedNotice;
         banner.hidden = !(recording || finishing || result || state.savedNotice);
         dot.hidden = elapsed.hidden = stop.hidden = !recording;
