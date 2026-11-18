@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.3';
+    const BUILD = '0.0.4';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -106,6 +106,84 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "system.requesting": "正在请求系统音频权限…",
+      "system.source": "声音来源",
+      "system.microphone": "麦克风",
+      "system.computer": "电脑声音",
+      "system.hint": "麦克风关闭 · 最长 60 分钟 · 报告采用学习笔记格式",
+      "system.confirm": "开始录制电脑声音（最长 60 分钟）？可能包含其他应用和通知声音。麦克风关闭，音频保存在本机。",
+      "system.report": "学习笔记",
+      "system.missing": "当前安装包缺少电脑声音组件，请安装完整版本。",
+      "system.unsupported": "电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。",
+      "system.unverified": "电脑声音组件校验失败，请重新安装。",
+      "system.deviceChanged": "输出设备已变化，录音已停止。已采集的音频保留。",
+      "system.limit": "电脑声音录制已达到 60 分钟上限。",
+      "system.failed": "电脑声音录制失败或被中断。请检查系统音频权限和输出设备。",
+
+      'interpret.title': '表达解读（潜台词）',
+      'interpret.topicHint': '可填写会议背景，帮助理解上下文',
+      'interpret.notice': '实验功能。以下为可能解释，不代表真实意图或事实；请结合上下文核对，必要时直接向对方确认。',
+      'interpret.consent': '将这份转写全文（{n} 个有效字符）及所填议题发送给 {model}，生成表达解读（潜台词）。文字可能含有姓名等隐私。是否继续？',
+      'interpret.invalidResult': '模型引用或报告格式不符，结果未保存，请重试。',
+      'interpret.changed': '转写或表达解读已有更新，请收起后重新打开再试。',
+      'interpret.empty': '未发现需要解读的表达。无需为普通表述推测潜台词。',
+      'interpret.literal': '字面信息',
+      'interpret.possible': '可能含义（推测）',
+      'interpret.alternatives': '其他解释',
+      'interpret.uncertainty': '不确定之处',
+      'interpret.question': '澄清问法',
+      'interpret.unknown': '无法判断',
+      'interpret.attribution': '该段有重叠发言或说话人归属不明，暂不推测含义。',
+      'interpret.quote': '原话',
+      'interpret.context': '查看相邻原文',
+      'interpret.before': '前文',
+      'interpret.after': '后文',
+      'interpret.waiting': '分析后会列出原话、可能含义、其他解释和澄清问法；最多 8 条。',
+      'interpret.export': '导出解读 TXT',
+      "check.title": "会议体检（实验）",
+      "check.headline": "废话含量",
+      "check.metric": "可压缩文字占比 · 模型估计",
+      "check.score": "可压缩文字约 {n}%",
+      "check.approx": "约 {n}%",
+      "check.waiting": "待分析",
+      "check.loading": "正在读取",
+      "check.analyzing": "正在分析",
+      "check.stale": "需要重新分析",
+      "check.unassessable": "暂无法评估",
+      "check.short": "至少需要 200 个有效字符才能评估。",
+      "check.tooLong": "当前最多支持 40,000 个有效字符、1,000 段文字。",
+      "check.pending": "请先结束录音并补全失败的转写片段。",
+      "check.invalid": "分析参数无效。",
+      "check.invalidResult": "模型标注不完整或格式不符，结果未保存，请重试。",
+      "check.changed": "转写或分析结果已有更新，请收起并重新打开会议体检后再试。",
+      "check.model": "请先选择本次分析使用的模型。",
+      "check.explanation": "按文字字符计算，排除空白和标点。无法判断的文字单独统计；达到 40% 时不出总分。该比例不表示会议浪费的时间。",
+      "check.counts": "可压缩 {removed} / 共 {total} 字符；待确认 {uncertain}%。",
+      "check.topic": "会议议题（可选）",
+      "check.language": "分析语言",
+      "check.topicHint": "不填写时，不判断跑题",
+      "check.preview": "查看将发送的全文（{n} 个有效字符）",
+      "check.consent": "将这份转写全文（{n} 个有效字符）及所填议题发送给 {model}，生成会议体检。文字可能含有姓名等隐私。是否继续？",
+      "check.analyze": "开始分析",
+      "check.regenerate": "重新分析",
+      "check.compact": "查看精简版",
+      "check.cancelled": "已取消分析。",
+      "check.locale": "zh",
+      "check.categories": "分类明细",
+      "check.repeat": "重复信息",
+      "check.filler": "填充语",
+      "check.offtopic": "可能跑题",
+      "check.uncertain": "待确认",
+      "check.keep": "需要保留",
+      "check.all": "查看标注",
+      "check.retain": "需要保留",
+      "check.undoRetain": "恢复模型判断",
+      "check.modelUsed": "模型：{model} · 分析议题：{topic}",
+      "check.noTopic": "未指定",
+      "check.parentTime": "回听所属发言段，非逐句时间戳",
+      "check.compactHint": "按原文顺序保留有用、待确认和人工保留的片段；请对照原文核对。",
+      "check.emptyCompact": "当前没有保留文字，请查看标注并核对。",
+      "check.noMatches": "此分类没有片段。",
       "meeting.installModel": "导入模型文件",
       "meeting.getModel": "下载模型文件",
       "meeting.installingModel": "正在校验模型文件…",
@@ -359,6 +437,84 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "system.requesting": "Requesting system audio permission…",
+      "system.source": "Audio source",
+      "system.microphone": "Microphone",
+      "system.computer": "Computer audio",
+      "system.hint": "Microphone off · 60 min maximum · Learning Notes reports",
+      "system.confirm": "Record computer playback audio (up to 60 minutes)? Other apps and notification sounds may be included. The microphone stays off. Audio is saved locally.",
+      "system.report": "Learning Notes",
+      "system.missing": "Computer audio component is missing. Install the full package.",
+      "system.unsupported": "Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.",
+      "system.unverified": "Computer audio integrity check failed. Reinstall the package.",
+      "system.deviceChanged": "Output device changed. Recording stopped; captured audio is preserved.",
+      "system.limit": "Computer audio reached its 60-minute limit.",
+      "system.failed": "Computer audio failed or was interrupted. Check system audio permission and output device.",
+
+      'interpret.title': 'Expression interpretation (subtext)',
+      'interpret.topicHint': 'Optional meeting background for context',
+      'interpret.notice': 'Experimental. These are possible readings, not verified intent or facts. Check the context and ask the speaker when clarification is needed.',
+      'interpret.consent': 'Send the full transcript ({n} letters and numbers) and the optional topic to {model} for expression interpretation (subtext)? The text may contain names and other private details.',
+      'interpret.invalidResult': 'The model returned invalid references or report data. Nothing was saved. Please retry.',
+      'interpret.changed': 'The transcript or interpretation changed. Close and reopen this panel before retrying.',
+      'interpret.empty': 'No expressions requiring interpretation were found. Ordinary statements do not need invented subtext.',
+      'interpret.literal': 'Literal reading',
+      'interpret.possible': 'Possible meaning (inference)',
+      'interpret.alternatives': 'Other explanations',
+      'interpret.uncertainty': 'Uncertainty',
+      'interpret.question': 'Clarifying question',
+      'interpret.unknown': 'Cannot determine',
+      'interpret.attribution': 'Overlapping speech or uncertain attribution: interpretation withheld.',
+      'interpret.quote': 'Original words',
+      'interpret.context': 'View adjacent source text',
+      'interpret.before': 'Before',
+      'interpret.after': 'After',
+      'interpret.waiting': 'Analysis lists original words, possible readings, alternatives and clarifying questions, with up to eight entries.',
+      'interpret.export': 'Export interpretation TXT',
+      "check.title": "Meeting check (experimental)",
+      "check.headline": "Meeting verbosity",
+      "check.metric": "Compressible text share · model estimate",
+      "check.score": "Approximately {n}% compressible text",
+      "check.approx": "~{n}%",
+      "check.waiting": "Not analyzed",
+      "check.loading": "Loading",
+      "check.analyzing": "Analyzing",
+      "check.stale": "Analysis out of date",
+      "check.unassessable": "Not assessable",
+      "check.short": "At least 200 letters or numbers are required.",
+      "check.tooLong": "Currently limited to 40,000 letters or numbers and 1,000 text units.",
+      "check.pending": "Finish recording and retry missing transcription segments first.",
+      "check.invalid": "Invalid analysis parameters.",
+      "check.invalidResult": "Model annotations were incomplete or invalid. No result was saved. Try again.",
+      "check.changed": "The transcript or analysis changed. Close and reopen this panel to refresh.",
+      "check.model": "Select a model before analyzing.",
+      "check.explanation": "Counts letters and numbers, excluding spaces and punctuation. Uncertain text is counted separately; no score is shown at 40% or more. This is not wasted meeting time.",
+      "check.counts": "Compressible: {removed} / {total} characters; uncertain: {uncertain}%.",
+      "check.topic": "Meeting topic (optional)",
+      "check.language": "Analysis language",
+      "check.topicHint": "Leave blank to skip off-topic judgments",
+      "check.preview": "Preview full text to be sent ({n} letters/numbers)",
+      "check.consent": "Send the full transcript ({n} letters/numbers) and the entered topic to {model} for analysis? The text may contain names or other private information.",
+      "check.analyze": "Analyze",
+      "check.regenerate": "Analyze again",
+      "check.compact": "View compact text",
+      "check.cancelled": "Analysis cancelled.",
+      "check.locale": "en",
+      "check.categories": "Category breakdown",
+      "check.repeat": "Repetition",
+      "check.filler": "Filler",
+      "check.offtopic": "Possibly off-topic",
+      "check.uncertain": "Uncertain",
+      "check.keep": "Keep",
+      "check.all": "View annotations",
+      "check.retain": "Keep this text",
+      "check.undoRetain": "Restore model judgment",
+      "check.modelUsed": "Model: {model} · Topic used: {topic}",
+      "check.noTopic": "Not specified",
+      "check.parentTime": "Replay the parent turn; timestamps are not sentence-level",
+      "check.compactHint": "Keeps useful, uncertain and manually retained text in source order. Review against the original.",
+      "check.emptyCompact": "No retained text. Review the annotations.",
+      "check.noMatches": "No units in this category.",
       "meeting.installModel": "Import model file",
       "meeting.getModel": "Download model file",
       "meeting.installingModel": "Verifying model file…",
@@ -746,6 +902,22 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-loading { display: flex; align-items: center; gap: 8px; padding: 16px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .vls-input { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1, #aaa); border-radius: 6px; color: inherit; font: inherit; padding: 5px 8px; }
 .vls-search { width: min(100%, 260px); }
+.vls-check { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.vls-check h3 { margin: 0; font-size: 14px; }
+.vls-check-overview { display: grid; grid-template-columns: minmax(180px, 240px) minmax(120px, 1fr); gap: 16px; align-items: center; }
+.vls-check-gauge { max-width: 240px; color: var(--dsw-alias-label-primary); }
+.vls-check-gauge svg { width: 100%; display: block; }
+.vls-check-unit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 10px; }
+.vls-check-unit blockquote { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+.vls-check-evidence { max-height: 420px; overflow: auto; }
+.vls-interpretation dl { margin: 12px 0 0; overflow-wrap: anywhere; }
+.vls-interpretation dt { margin-top: 10px; font-weight: 600; font-size: 12px; }
+.vls-interpretation dd { margin: 4px 0 0; white-space: pre-wrap; }
+.vls-interpretation dd ul { margin: 4px 0; padding-left: 20px; }
+.vls-interpretation .vls-check-unit { min-width: 0; }
+.vls-interpretation > .vl-note { margin: 0; }
+.vls-check .vls-mini[aria-pressed="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); text-decoration: underline; }
+@media (max-width: 600px) { .vls-check-overview { grid-template-columns: 1fr; } }
 .vls-meeting { display: grid; gap: 8px; margin: 8px 0; }
 .vls-segments { display: grid; gap: 6px; padding: 0; margin: 8px 0; list-style: none; }
 .vls-segment { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #ddd); }
@@ -839,6 +1011,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       reportLanguage: REPORT_LANGUAGES.some(([code]) => code === prefs.reportLanguage) ? prefs.reportLanguage : 'auto',
       targetLanguage: savedTarget,
       sourceLanguage: savedSource,
+      captureSource: 'microphone',
       translate: savedTarget !== 'off',
       editMode: Boolean(savedModelPermission) && prefs.editMode === true,
       editedText: '',
@@ -1590,11 +1763,75 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       };
     }
 
+    function computerAudioMessage(code) {
+      return translate(`system.${['missing', 'unsupported', 'unverified', 'deviceChanged', 'limit'].includes(code) ? code : 'failed'}`);
+    }
+
+    async function openSystemAudio(language) {
+      const availability = await request('/system-audio', { method: 'GET' });
+      if (!availability.ready) throw new Error(computerAudioMessage(availability.code));
+      const response = await fetch(`${API}/system-audio`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmed: true, language }), signal: engine.abort.signal,
+      });
+      let session;
+      try { session = await readJsonResponse(response); }
+      catch (error) { throw new Error(computerAudioMessage(error.code)); }
+      const controller = new AbortController();
+      const capture = {
+        system: true, recording: session.recording, closed: false,
+        audio: { sampleRate: SAMPLE_RATE }, stream: { getTracks: () => [] }, mimeType: 'audio/wav',
+        async stopNative() {
+          if (!capture.stopping) capture.stopping = request(`/system-audio/${session.id}`, { method: 'DELETE' });
+          const result = await capture.stopping;
+          if (result.code) { engine.run && (engine.run.interrupted = true); store.set({ captureWarning: computerAudioMessage(result.code) }); }
+          await capture.reading;
+        },
+        async close() {
+          controller.abort();
+          await capture.stopNative().catch(() => {});
+        },
+        start(generation) {
+          capture.reading = (async () => {
+            let failed = false;
+            try {
+              const response = await fetch(`${API}/system-audio/${session.id}/stream`, { signal: controller.signal });
+              if (!response.ok || !response.body) throw new Error('Audio stream unavailable');
+              const reader = response.body.getReader();
+              let remainder = new Uint8Array(0);
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const bytes = new Uint8Array(remainder.length + value.length);
+                bytes.set(remainder); bytes.set(value, remainder.length);
+                const count = Math.floor(bytes.length / 2), view = new DataView(bytes.buffer);
+                const samples = new Float32Array(count);
+                for (let i = 0; i < count; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+                remainder = bytes.slice(count * 2);
+                ingestSamples(samples, generation);
+              }
+              if (remainder.length) throw new Error('Incomplete audio sample');
+            } catch { failed = !controller.signal.aborted; }
+            finally {
+              if (generation === engine.generation && store.get().phase === 'recording') {
+                const status = await request(`/system-audio/${session.id}`, { method: 'GET' }).catch(() => ({ code: 'captureFailed' }));
+                if (failed || status.code) store.set({ captureWarning: computerAudioMessage(status.code) });
+                // Schedule after this reader settles; finish waits for it when flushing.
+                queueMicrotask(() => void finish(failed || status.code ? 'interrupted' : 'stop'));
+              }
+            }
+          })();
+        },
+      };
+      return capture;
+    }
+
     async function closeCapture() {
       const capture = engine.capture;
       engine.capture = null;
       if (!capture || capture.closed) return;
       capture.closed = true;
+      await capture.close?.();
       if (capture.recorder && capture.recorder.state !== 'inactive') {
         try {
           capture.recorder.onstop = null;
@@ -1672,6 +1909,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function flushPcm(capture) {
+      if (capture?.system) return capture.stopNative().catch((error) => {
+        if (engine.run) engine.run.interrupted = true;
+        store.set({ captureWarning: messageOf(error) });
+      });
       return new Promise((resolve) => {
         if (!capture?.worklet) {
           resolve();
@@ -1905,10 +2146,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return han > 0 && han >= latin * 0.4 ? 'zh' : 'en';
     }
 
-    async function createMeetingReport(source, model, preference) {
+    async function createMeetingReport(source, model, preference, kind = 'meeting') {
       const language = resolveReportLanguage(preference, source);
       const send = async (text, mode, compact) => {
-        const body = await request('/report', { json: { text, mode, compact, language, model } });
+        const body = await request('/report', { json: { text, mode, compact, language, model, kind } });
         return String(body.report ?? '').trim();
       };
       if (source.length <= 12_000) return send(source);
@@ -1929,7 +2170,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       if (!source) return;
       store.set({ reporting: true, reportError: '' });
       try {
-        const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage);
+        const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage, run?.source === 'system' ? 'learning' : 'meeting');
         await patchArchive(run, { report, meetingRevision });
         if (generation === engine.generation) store.set({ report, reporting: false });
       } catch (error) {
@@ -2002,31 +2243,39 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const captureOptions = store.get();
       const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
         ? captureOptions.meetingSpeakers : undefined;
+      const computerAudio = captureOptions.surface === 'studio' && captureOptions.captureSource === 'system';
+      if (computerAudio && !window.confirm(translate('system.confirm') +
+        (captureOptions.translate || captureOptions.editMode || captureOptions.reportMode
+          ? '\n\n' + modelDisclosure(captureOptions, translate) : ''))) {
+        store.set({ phase: 'idle' }); return;
+      }
       const archive = captureOptions.surface === 'studio' || captureOptions.dictationHistory;
       const model = store.get().status?.model ?? null;
       store.set({ phase: 'requesting', providerId: provider.id, error: '' });
       let capture;
       try {
-        capture = await openMicrophone(archive);
+        capture = computerAudio ? await openSystemAudio(language) : await openMicrophone(archive);
       } catch (error) {
         if (generation !== engine.generation) return;
-        store.set({ phase: 'error', error: micError(error) });
+        store.set({ phase: 'error', error: computerAudio ? messageOf(error) : micError(error) });
         return;
       }
       if (generation !== engine.generation) {
+        await capture.close?.();
         for (const node of [capture.worklet, capture.processor, capture.source, capture.mute]) node?.disconnect();
         for (const track of capture.stream.getTracks()) track.stop();
         return;
       }
       engine.capture = capture;
       try {
-        const recording = archive
+        const recording = capture.recording ?? (archive
           ? (await request('/recordings/live', {
               json: { mimeType: capture.mimeType, language, providerId: provider.id },
-            })).recording : null;
+            })).recording : null);
         if (generation !== engine.generation) return;
         const run = {
           id: recording?.id ?? null,
+          source: computerAudio ? 'system' : 'microphone',
           meetingSpeakers,
           localTexts: new Map(),
           language,
@@ -2079,9 +2328,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           ...current,
           phase: 'recording', elapsed: 0, level: 0,
           archiveStage: archive ? '' : 'draft',
-          captureWarning: archive && !capture.recorder ? translate('archive.noRecorder') : '',
+          captureWarning: archive && !capture.recorder && !capture.system ? translate('archive.noRecorder') : '',
           historyVersion: current.historyVersion + Number(archive),
         }));
+        capture.start?.(generation);
         startTicker(generation, run);
       } catch (error) {
         await closeCapture();
@@ -3311,6 +3561,280 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return { text, x: (rect.left + rect.right) / 2, top: rect.top, bottom: rect.bottom };
     }
 
+    function CheckGauge({ percent, t, state }) {
+      const ready = typeof percent === 'number';
+      const angle = Math.PI * (1 - (percent ?? 0) / 100);
+      const x = 120 + 79 * Math.cos(angle), y = 110 - 79 * Math.sin(angle);
+      return h('div', { className: 'vls-check-gauge', role: 'img',
+        'aria-label': ready ? t('check.score', { n: percent }) : t(`check.${state}`) },
+        h('svg', { viewBox: '0 0 240 158', 'aria-hidden': true },
+          h('path', { d: 'M 22 110 A 98 98 0 0 1 71 25.13', fill: 'none', stroke: '#41947b', strokeWidth: 12 }),
+          h('path', { d: 'M 71 25.13 A 98 98 0 0 1 169 25.13', fill: 'none', stroke: '#d2a246', strokeWidth: 12 }),
+          h('path', { d: 'M 169 25.13 A 98 98 0 0 1 218 110', fill: 'none', stroke: '#c8736a', strokeWidth: 12 }),
+          ready ? h('g', null,
+            h('line', { x1: 120, y1: 110, x2: x, y2: y, stroke: 'currentColor', strokeWidth: 3, strokeLinecap: 'round' }),
+            h('circle', { cx: 120, cy: 110, r: 5, fill: 'currentColor' }),
+          ) : null,
+          h('text', { x: 22, y: 135, textAnchor: 'middle', fill: 'currentColor', fontSize: 12 }, '0'),
+          h('text', { x: 120, y: 37, textAnchor: 'middle', fill: 'currentColor', fontSize: 11 }, '50'),
+          h('text', { x: 218, y: 135, textAnchor: 'middle', fill: 'currentColor', fontSize: 12 }, '100'),
+          h('text', { x: 120, y: 151, textAnchor: 'middle', fill: 'currentColor', fontSize: ready ? 27 : 15, fontWeight: 600 },
+            ready ? t('check.approx', { n: percent }) : t(`check.${state}`)),
+        ),
+      );
+    }
+
+    function MeetingCheck({ id, t, seek, audioAvailable, onChanged, sourceVersion }) {
+      const [data, setData] = React.useState(null);
+      const [topic, setTopic] = React.useState('');
+      const [filter, setFilter] = React.useState('all');
+      const [error, setError] = React.useState('');
+      const [stage, setStage] = React.useState('loading');
+      const [compact, setCompact] = React.useState(false);
+      const [language, setLanguage] = React.useState(t('check.locale'));
+      const activeRequest = React.useRef(null);
+      const endpoint = `/recordings/${id}/check`;
+      const source = data?.source, analysis = data?.check;
+      const pending = ['loading', 'analyzing', 'saving'].includes(stage);
+
+      const failureText = (failure) => Object.hasOwn(EN, `check.${failure.code}`)
+        ? t(`check.${failure.code}`) : messageOf(failure);
+
+      React.useEffect(() => {
+        setStage('loading');
+        setData(null);
+        const controller = new AbortController();
+        fetch(`${API}${endpoint}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+          .then(readJsonResponse)
+          .then((body) => { if (!controller.signal.aborted) { setData(body); setTopic(body.check?.topic ?? ''); setLanguage(body.check?.language ?? t('check.locale')); setStage('idle'); } })
+          .catch((failure) => { if (!controller.signal.aborted) { setError(failureText(failure)); setStage('idle'); } });
+        return () => { controller.abort(); activeRequest.current?.abort(); };
+      }, [endpoint, sourceVersion]);
+
+      async function analyze() {
+        if (pending || source?.state !== 'ready') return;
+        setError('');
+        const controller = new AbortController();
+        activeRequest.current = controller;
+        setStage('analyzing');
+        store.set((state) => ({ ...state, checkJobs: (state.checkJobs ?? 0) + 1 }));
+        try {
+          const model = (await fetchStatus()).model;
+          if (!modelKey(model)) throw new Error(t('model.unavailable'));
+          controller.signal.throwIfAborted();
+          if (!window.confirm(t('check.consent', {
+            model: `${model.provider} / ${model.model}`, n: source.chars,
+          }))) return;
+          const response = await fetch(`${API}${endpoint}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sourceHash: source.hash, analysisId: analysis?.id ?? null, revision: analysis?.revision ?? 0, topic, model, language }),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(310_000)]),
+          });
+          const body = await readJsonResponse(response);
+          setData((previous) => ({ ...previous, check: body.check }));
+          setCompact(false);
+          setFilter('all');
+          onChanged();
+        } catch (failure) {
+          setError(controller.signal.aborted ? t('check.cancelled') : failureText(failure));
+        } finally {
+          activeRequest.current = null;
+          setStage('idle');
+          store.set((state) => ({ ...state, checkJobs: Math.max(0, (state.checkJobs ?? 0) - 1) }));
+        }
+      }
+
+      async function retain(unit) {
+        if (pending) return;
+        setStage('saving'); setError('');
+        try {
+          const body = await request(endpoint, { method: 'PATCH', json: {
+            analysisId: analysis.id, unitId: unit.id, retained: !unit.retained,
+          } });
+          setData((previous) => ({ ...previous, check: body.check }));
+          onChanged();
+        } catch (failure) { setError(failureText(failure)); }
+        finally { setStage('idle'); }
+      }
+
+      const gaugeState = stage === 'analyzing' ? 'analyzing' : stage === 'loading' ? 'loading'
+        : analysis?.stale ? 'stale' : analysis ? 'unassessable' : source?.state === 'ready' ? 'waiting' : 'unassessable';
+      const percent = stage === 'analyzing' || stage === 'loading' ? null : analysis?.percent ?? null;
+      const cats = ['repeat', 'filler', 'offtopic', 'uncertain', 'keep'];
+      const rows = analysis?.units.filter((unit) => filter === 'all'
+        ? unit.category !== 'keep' || unit.retained
+        : filter === 'keep' ? unit.category === 'keep' || unit.retained : unit.category === filter && !unit.retained);
+
+      return h('section', { className: 'vls-check', 'aria-label': t('check.title') },
+        h('h3', null, t('check.title')),
+        h('div', { className: 'vls-check-overview' },
+          h('div', null, h('div', { className: 'vl-label' }, t('check.headline')),
+            h(CheckGauge, { percent, t, state: gaugeState }),
+            h('p', { className: 'vl-note' }, t('check.metric'))),
+          h('div', null,
+            h('p', { className: 'vl-note' }, t('check.explanation')),
+            analysis ? h('p', { className: 'vl-note' },
+              t('check.counts', { removed: analysis.removed, total: analysis.total, uncertain: analysis.uncertain })) : null,
+            source && source.state !== 'ready' ? h('p', { className: 'vl-note' }, t(`check.${source.state}`)) : null,
+            analysis?.stale ? h('p', { className: 'vls-error' }, t('check.changed')) : null,
+          )),
+        h('label', { className: 'vls-lang' }, t('check.topic'),
+          h('input', { className: 'vls-input', value: topic, maxLength: 300, disabled: pending,
+            placeholder: t('check.topicHint'), onChange: (event) => setTopic(event.target.value) })),
+        h('details', null, h('summary', { className: 'vl-note' }, t('check.preview', { n: source?.chars ?? 0 })),
+          h('p', { className: 'vls-report-text' }, source?.text || '—')),
+        h('label', { className: 'vls-lang' }, t('check.language'),
+          h('select', { className: 'vl-select', value: language, disabled: pending,
+            onChange: (event) => setLanguage(event.target.value) },
+            h('option', { value: 'zh' }, '简体中文'), h('option', { value: 'en' }, 'English'))),
+        h('div', { className: 'vls-options-row' },
+          h('button', { type: 'button', className: 'vl-btn', disabled: pending || source?.state !== 'ready',
+            onClick: analyze }, t(analysis ? 'check.regenerate' : 'check.analyze')),
+          stage === 'analyzing' ? h('button', { type: 'button', className: 'vls-mini',
+            onClick: () => activeRequest.current?.abort() }, t('studio.cancel')) : null,
+          analysis && !analysis.stale ? h('button', { type: 'button', className: 'vls-mini', 'aria-expanded': compact,
+            onClick: () => setCompact(!compact) }, t('check.compact')) : null,
+        ),
+        error ? h('p', { className: 'vls-error', role: 'alert' }, error) : null,
+        analysis ? h(React.Fragment, null,
+          h('p', { className: 'vl-note' }, t('check.modelUsed', {
+            model: `${analysis.model.provider} / ${analysis.model.model}`, topic: analysis.topic || t('check.noTopic'),
+          })),
+          h('div', { className: 'vls-options-row', role: 'group', 'aria-label': t('check.categories') },
+            h('button', { type: 'button', className: 'vls-mini', 'aria-pressed': filter === 'all',
+              onClick: () => setFilter('all') }, t('check.all')),
+            cats.map((category) => h('button', { key: category, type: 'button', className: 'vls-mini',
+              'aria-pressed': filter === category, onClick: () => setFilter(category) },
+              t(`check.${category}`), ' ', analysis.total ? Math.round(analysis.counts[category] / analysis.total * 100) : 0, '%')),
+          ),
+          compact && !analysis.stale ? h('div', null,
+            h('p', { className: 'vl-note' }, t('check.compactHint')),
+            h('p', { className: 'vls-report-text' }, analysis.compact || t('check.emptyCompact'))) : null,
+          h('ol', { className: 'vls-segments vls-check-evidence' }, rows.map((unit) =>
+            h('li', { className: 'vls-check-unit', key: unit.id },
+              h('div', { className: 'vls-options-row' },
+                h('b', null, t(`check.${unit.retained ? 'keep' : unit.category}`)),
+                unit.start !== null && audioAvailable ? h('button', { type: 'button', className: 'vls-mini',
+                  title: t('check.parentTime'), onClick: () => seek(unit.start) }, formatTime(unit.start)) : null,
+                unit.category !== 'keep' ? h('button', { type: 'button', className: 'vls-mini', disabled: pending || analysis.stale,
+                  'aria-pressed': unit.retained, onClick: () => void retain(unit) },
+                  t(unit.retained ? 'check.undoRetain' : 'check.retain')) : null,
+              ),
+              h('blockquote', null, unit.text),
+              h('p', { className: 'vl-note' }, unit.reason),
+            ),
+          )),
+          !rows.length ? h('p', { className: 'vl-note' }, t('check.noMatches')) : null,
+        ) : null,
+      );
+    }
+
+    function MeetingInterpretation({ id, t, seek, audioAvailable, onChanged, sourceVersion }) {
+      const [data, setData] = React.useState(null);
+      const [topic, setTopic] = React.useState('');
+      const [language, setLanguage] = React.useState(t('check.locale'));
+      const [stage, setStage] = React.useState('loading');
+      const [error, setError] = React.useState('');
+      const activeRequest = React.useRef(null);
+      const endpoint = `/recordings/${id}/interpretation`;
+      const source = data?.source, report = data?.report;
+      const pending = stage !== 'idle';
+      const failureText = (failure) => Object.hasOwn(EN, `interpret.${failure.code}`)
+        ? t(`interpret.${failure.code}`) : Object.hasOwn(EN, `check.${failure.code}`)
+          ? t(`check.${failure.code}`) : messageOf(failure);
+
+      React.useEffect(() => {
+        setData(null); setStage('loading'); setError('');
+        const controller = new AbortController();
+        fetch(`${API}${endpoint}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+          .then(readJsonResponse)
+          .then((body) => {
+            if (controller.signal.aborted) return;
+            setData(body); setTopic(body.report?.topic ?? '');
+            setLanguage(body.report?.language ?? t('check.locale')); setStage('idle');
+          })
+          .catch((failure) => { if (!controller.signal.aborted) { setError(failureText(failure)); setStage('idle'); } });
+        return () => { controller.abort(); activeRequest.current?.abort(); };
+      }, [endpoint, sourceVersion]);
+
+      async function analyze() {
+        if (pending || source?.state !== 'ready') return;
+        const controller = new AbortController();
+        activeRequest.current = controller;
+        setError(''); setStage('analyzing');
+        store.set((state) => ({ ...state, checkJobs: (state.checkJobs ?? 0) + 1 }));
+        try {
+          const model = (await fetchStatus()).model;
+          if (!modelKey(model)) throw new Error(t('model.unavailable'));
+          controller.signal.throwIfAborted();
+          if (!window.confirm(t('interpret.consent', { model: `${model.provider} / ${model.model}`, n: source.chars }))) return;
+          const response = await fetch(`${API}${endpoint}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sourceHash: source.hash, analysisId: report?.id ?? null, topic, language, model }),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(310_000)]),
+          });
+          const body = await readJsonResponse(response);
+          controller.signal.throwIfAborted();
+          setData((previous) => ({ ...previous, report: body.report }));
+          onChanged();
+        } catch (failure) { setError(controller.signal.aborted ? t('check.cancelled') : failureText(failure)); }
+        finally {
+          activeRequest.current = null; setStage('idle');
+          store.set((state) => ({ ...state, checkJobs: Math.max(0, (state.checkJobs ?? 0) - 1) }));
+        }
+      }
+
+      return h('section', { className: 'vls-check vls-interpretation', 'aria-label': t('interpret.title') },
+        h('h3', null, t('interpret.title')),
+        h('p', { className: 'vl-note' }, t('interpret.notice')),
+        h('label', { className: 'vls-lang' }, t('check.topic'),
+          h('input', { className: 'vls-input', value: topic, maxLength: 300, disabled: pending,
+            placeholder: t('interpret.topicHint'), onChange: (event) => setTopic(event.target.value) })),
+        h('label', { className: 'vls-lang' }, t('check.language'),
+          h('select', { className: 'vl-select', value: language, disabled: pending,
+            onChange: (event) => setLanguage(event.target.value) },
+            h('option', { value: 'zh' }, '简体中文'), h('option', { value: 'en' }, 'English'))),
+        h('details', null, h('summary', { className: 'vl-note' }, t('check.preview', { n: source?.chars ?? 0 })),
+          h('p', { className: 'vls-report-text' }, source?.text || '—')),
+        source && source.state !== 'ready' ? h('p', { className: 'vl-note' }, t(`check.${source.state}`)) : null,
+        report?.stale ? h('p', { className: 'vls-error', role: 'status' }, t('interpret.changed')) : null,
+        h('div', { className: 'vls-options-row' },
+          h('button', { type: 'button', className: 'vl-btn', disabled: pending || source?.state !== 'ready', onClick: analyze },
+            t(report ? 'check.regenerate' : 'check.analyze')),
+          stage === 'analyzing' ? h('button', { type: 'button', className: 'vls-mini', onClick: () => activeRequest.current?.abort() }, t('studio.cancel')) : null,
+          report && !report.stale && !pending ? h('a', { className: 'vls-mini', download: true,
+            href: `${API}${endpoint}?format=txt&locale=${report.language}` }, t('interpret.export')) : null,
+        ),
+        pending ? h('p', { className: 'vl-note', role: 'status' }, t(`check.${stage}`)) : null,
+        error ? h('p', { className: 'vls-error', role: 'alert' }, error) : null,
+        !report && !pending ? h('p', { className: 'vl-note' }, t('interpret.waiting')) : null,
+        report ? h(React.Fragment, null,
+          h('p', { className: 'vl-note' }, t('check.modelUsed', {
+            model: `${report.model.provider} / ${report.model.model}`, topic: report.topic || t('check.noTopic'),
+          }), ' · ', formatDate(Date.parse(report.createdAt))),
+          !report.items.length && !report.stale ? h('p', { className: 'vl-note' }, t('interpret.empty')) : null,
+          h('ol', { className: 'vls-segments' }, report.items.map((item) => h('li', { className: 'vls-check-unit', key: item.unitIds.join('-') },
+            h('div', { className: 'vls-options-row' }, h('b', null, t('interpret.quote')),
+              item.start !== null && audioAvailable ? h('button', { type: 'button', className: 'vls-mini',
+                title: t('check.parentTime'), onClick: () => seek(item.start) }, formatTime(item.start)) : null),
+            h('blockquote', null, item.quote),
+            item.before || item.after ? h('details', null,
+              h('summary', { className: 'vl-note' }, t('interpret.context')),
+              item.before ? h('p', { className: 'vls-report-text' }, t('interpret.before'), '：', item.before) : null,
+              item.after ? h('p', { className: 'vls-report-text' }, t('interpret.after'), '：', item.after) : null) : null,
+            h('dl', null,
+              h('dt', null, t('interpret.literal')), h('dd', null, item.literal),
+              h('dt', null, t('interpret.possible')), h('dd', null, item.status === 'uncertain' ? t('interpret.unknown') : item.possible),
+              h('dt', null, t('interpret.alternatives')), h('dd', null, h('ul', null, item.alternatives.map((value, i) => h('li', { key: i }, value)))),
+              h('dt', null, t('interpret.uncertainty')), h('dd', null,
+                item.attributionUncertain ? t('interpret.attribution') + ' ' : '', item.uncertainty),
+              h('dt', null, t('interpret.question')), h('dd', null, item.question),
+            ),
+          ))),
+        ) : null,
+      );
+    }
+
     function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion, meetingJob }) {
       const [details, setDetails] = React.useState(null);
       const [expanded, setExpanded] = React.useState(false);
@@ -3447,7 +3971,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           const model = (await fetchStatus()).model;
           if (!modelKey(model)) throw new Error(t('model.unavailable'));
           if (!window.confirm(t('report.send', { model: `${model.provider} / ${model.model}` }))) return;
-          const report = await createMeetingReport(transcript, model, reportLanguage);
+          const report = await createMeetingReport(transcript, model, reportLanguage, recording.source === 'system' ? 'learning' : 'meeting');
           const { recording: updated } = await request(path, {
             method: 'PATCH', json: { report, meetingRevision: recording.meeting?.revision },
           });
@@ -3674,6 +4198,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
             disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
           }, t('import.retranscribe')) : null,
+          !active && (hasTranscript || item.hasCheck) ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'check',
+            onClick: () => setTool(tool === 'check' ? '' : 'check'),
+          }, t('check.title')) : null,
+          !active && (hasTranscript || item.hasInterpretation) ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'interpretation',
+            onClick: () => setTool(tool === 'interpretation' ? '' : 'interpretation'),
+          }, t('interpret.title')) : null,
           !active && (hasTranscript || item.hasReport) ? h('button', {
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
             onClick: () => setTool(tool === 'report' ? '' : 'report'),
@@ -3721,6 +4253,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           itemMeetingJob.active ? h('button', { type: 'button', className: 'vls-mini',
             onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
         ) : null,
+        tool === 'check' ? h(MeetingCheck, { id: item.id, t, seek,
+          audioAvailable: Boolean(item.audioUrl), onChanged,
+          sourceVersion: JSON.stringify([refreshVersion, details?.text, details?.correctedText, details?.meeting?.revision, details?.pendingCount]) }) : null,
+        tool === 'interpretation' ? h(MeetingInterpretation, { id: item.id, t, seek,
+          audioAvailable: Boolean(item.audioUrl), onChanged,
+          sourceVersion: JSON.stringify([refreshVersion, details?.text, details?.correctedText, details?.meeting?.revision, details?.pendingCount]) }) : null,
         tool === 'meeting' ? speakerPanel() : null,
         tool === 'transcribe' ? h('div', { className: 'vls-options-row' },
           h('label', { className: 'vls-lang' }, t('language.title'),
@@ -3813,7 +4351,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function UpdateControl({ state, t }) {
       const [view, setView] = React.useState({ state: 'checking' });
-      const busy = state.importing || state.retrySaving || state.preparing || state.reporting || state.meetingJob?.active ||
+      const busy = state.importing || state.retrySaving || state.preparing || state.reporting || state.meetingJob?.active || state.checkJobs > 0 ||
         state.editing || state.translating || ['requesting', 'recording', 'finishing'].includes(state.phase);
 
       async function check(refresh = false) {
@@ -3870,6 +4408,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     function Studio(props) {
       const t = translate;
       const state = useStore();
+      const studioSource = state.surface === 'composer' && ['requesting', 'recording', 'finishing'].includes(state.phase)
+        ? 'microphone' : state.captureSource;
       const [history, setHistory] = React.useState({
         loading: true,
         items: [],
@@ -4070,7 +4610,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const statusText = recording
         ? t('phase.recording')
         : requesting
-          ? t('phase.requesting')
+          ? t(studioSource === 'system' ? 'system.requesting' : 'phase.requesting')
           : finishing
             ? stopFeedback(state, t)
             : phase === 'setup'
@@ -4447,6 +4987,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             ),
             h('div', { className: 'vls-options-row' },
               h('label', { className: 'vls-lang' },
+                t('system.source'),
+                h('select', { className: 'vl-select', value: studioSource,
+                  disabled: recording || requesting || finishing || state.importing,
+                  onChange: (event) => store.set({ captureSource: event.target.value }) },
+                  h('option', { value: 'microphone' }, t('system.microphone')),
+                  h('option', { value: 'system' }, t('system.computer')))),
+              studioSource === 'system' ? h('span', { className: 'vl-note' },
+                t('system.hint')) : null,
+              h('label', { className: 'vls-lang' },
                 h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ meetingMode: event.target.checked }) }),
                 t('meeting.mode'),
@@ -4483,7 +5032,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button', className: 'vl-toggle', 'aria-pressed': state.reportMode,
                   disabled: !state.reportMode && !activeModel(state),
                   title: t('studio.reportHint'), onClick: () => setReportMode(!state.reportMode),
-                }, h(Icon, { name: 'file', size: 14 }), t('studio.report')),
+                }, h(Icon, { name: 'file', size: 14 }), studioSource === 'system' ? t('system.report') : t('studio.report')),
                 h(ReportLanguageSelect, {
                   t, value: state.reportLanguage, disabled: state.reporting,
                   setValue: (reportLanguage) => {
@@ -4624,7 +5173,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         const recording = state.phase === 'recording';
         const finishing = state.phase === 'finishing';
         const result = state.phase === 'result' && (state.surface === 'composer' || state.archiveStage === 'failed' || state.savedNotice);
-        const text = recording ? translate('recording.live')
+        const text = recording ? (engine.run?.source === 'system' ? translate('system.computer') + ' · ' : '') + translate('recording.live')
           : finishing || result ? stopFeedback(state, translate) : state.savedNotice;
         banner.hidden = !(recording || finishing || result || state.savedNotice);
         dot.hidden = elapsed.hidden = stop.hidden = !recording;

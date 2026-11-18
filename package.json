@@ -1,8 +1,8 @@
 {
   "name": "dsh-voice-notes",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
-  "description": "DeepSeek Harness 本地录音转写、说话人区分和会议纪要 / Local transcription, speaker diarization and meeting notes for DeepSeek Harness Desktop.",
+  "description": "DeepSeek Harness 本地录音转写、电脑声音录制、学习笔记和会议分析 / Local transcription, computer audio, learning notes and meeting analysis for DeepSeek Harness.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
@@ -13,6 +13,8 @@
     "index.js",
     "storage.js",
     "meeting.js",
+    "meeting-check.js",
+    "meeting-interpretation.js",
     "meeting-worker.js",
     "meeting-models/segmentation.onnx",
     "meeting-models/LICENSE",
@@ -25,7 +27,18 @@
     "README.md",
     "PRIVACY.md",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "pcm.js",
+    "system-audio.js",
+    "native/macos/*",
+    "native/windows/*",
+    "scripts/build-system-audio.mjs",
+    "native/bin/darwin-arm64.json",
+    "native/bin/darwin-arm64/VoiceNotesAudio.app/Contents/Info.plist",
+    "native/bin/darwin-arm64/VoiceNotesAudio.app/Contents/MacOS/VoiceNotesAudio",
+    "native/bin/darwin-arm64/VoiceNotesAudio.app/Contents/_CodeSignature/CodeResources",
+    "native/bin/win32-x64.json",
+    "native/bin/win32-x64/system-audio.exe"
   ],
   "dsh": {
     "bundle": {
@@ -48,7 +61,8 @@
   },
   "icon": "./icon.svg",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "build:native": "node scripts/build-system-audio.mjs"
   },
   "engines": {
     "dsh": ">=0.2.2-rc.3 <0.3.0"
@@ -84,7 +98,13 @@
     "dictation",
     "语音转文字",
     "语音识别",
-    "本地录音"
+    "本地录音",
+    "system-audio",
+    "wasapi-loopback",
+    "learning-notes",
+    "电脑声音录制",
+    "会议体检",
+    "潜台词"
   ],
   "repository": {
     "type": "git",

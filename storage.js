@@ -6,7 +6,10 @@
  * coming from HTTP is validated before it reaches the filesystem.
  */
 
+import { pcmWaveHeader } from './pcm.js';
 import { constants } from 'node:fs';
+import { checkSource, CheckError } from './meeting-check.js';
+import { interpretationSource } from './meeting-interpretation.js';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -265,7 +268,7 @@ export function createRecordingStore(directory) {
   }
 
   async function save({ audio, mimeType, text, translation, duration, language, providerId,
-    title, report, diagnostics, source, live = false }) {
+    title, report, diagnostics, source, systemPcm = false, live = false }) {
     await ensure();
     const mime = normalizeMime(mimeType);
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -285,8 +288,9 @@ export function createRecordingStore(directory) {
       audioFile,
       size: audioFile ? audio.length : 0,
       title: cleanTitle(title) || defaultTitle(cleanText),
-      ...(source === 'import' || source === 'retranscription' ? { source, customTitle: Boolean(cleanTitle(title)) } : {}),
+      ...(source === 'import' || source === 'retranscription' || source === 'system' ? { source, customTitle: Boolean(cleanTitle(title)) } : {}),
     };
+    if (source === 'system' && systemPcm === true) meta.systemPcm = true;
     if (diagnostics && typeof diagnostics === 'object') {
       meta.diagnostics = {
         pcmSamples: Number(diagnostics.pcmSamples) || 0,
@@ -438,6 +442,40 @@ export function createRecordingStore(directory) {
       });
     },
 
+    saveCheck(id, check, previous, signal) {
+      return change(id, (meta) => {
+        signal?.throwIfAborted();
+        const source = checkSource(meta);
+        if (source.state !== 'ready' || source.hash !== check.sourceHash ||
+            (meta.check?.id ?? null) !== previous.id || (meta.check?.revision ?? 0) !== previous.revision) throw new CheckError('changed', 409);
+        meta.check = check;
+      });
+    },
+
+    saveInterpretation(id, interpretation, previousId, signal) {
+      return change(id, (meta) => {
+        signal?.throwIfAborted();
+        const source = interpretationSource(meta);
+        if (source.state !== 'ready' || source.hash !== interpretation.sourceHash ||
+            (meta.interpretation?.id ?? null) !== previousId) throw new CheckError('changed', 409);
+        meta.interpretation = interpretation;
+      });
+    },
+
+    retainCheckUnit(id, analysisId, unitId, retained) {
+      return change(id, (meta) => {
+        const source = checkSource(meta);
+        if (!meta.check || meta.check.id !== analysisId ||
+            meta.check.sourceHash !== source.hash || source.state !== 'ready') {
+          throw new CheckError('changed', 409);
+        }
+        const label = meta.check.labels.find((row) => row.id === unitId);
+        if (!label) throw new CheckError('invalid', 400);
+        label.retained = retained;
+        meta.check.revision += 1;
+      });
+    },
+
     saveMeeting(id, meeting, revision = 0) {
       return change(id, (meta) => {
         if ((meta.meeting?.revision ?? 0) !== revision) throw new StorageError(409, '多人转写已变更，请刷新');
@@ -512,7 +550,7 @@ export function createRecordingStore(directory) {
       if (meta.segments) {
         if (!meta.size) throw new StorageError(404, '录音没有音频文件');
         await requireDirectory(partDir(meta.id));
-        return { size: meta.size };
+        return { size: meta.size + (meta.systemPcm ? 44 : 0) };
       }
       try {
         const info = await archiveFileInfo(audioPath(meta));
@@ -528,6 +566,10 @@ export function createRecordingStore(directory) {
       return Readable.from((async function* () {
         await requireDirectory(partDir(meta.id));
         let offset = 0;
+        if (meta.systemPcm) {
+          if (start < 44) yield pcmWaveHeader(meta.size).subarray(start, Math.min(end + 1, 44));
+          offset = 44;
+        }
         for (let sequence = 0; sequence < meta.chunkCount && offset <= end; sequence += 1) {
           const file = partFile(meta.id, sequence);
           const size = Number((await archiveFileInfo(file)).size);
