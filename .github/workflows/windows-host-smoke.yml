@@ -1,7 +1,8 @@
 name: Windows Desktop meeting smoke test
 on:
   push:
-    branches: [main, windows-host-smoke, system-audio-v0.0.4]
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
