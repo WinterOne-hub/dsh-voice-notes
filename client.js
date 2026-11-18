@@ -106,6 +106,50 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "check.title": "会议体检（实验）",
+      "check.headline": "废话含量",
+      "check.metric": "可压缩文字占比 · 模型估计",
+      "check.score": "可压缩文字约 {n}%",
+      "check.approx": "约 {n}%",
+      "check.waiting": "待分析",
+      "check.loading": "正在读取",
+      "check.analyzing": "正在分析",
+      "check.stale": "需要重新分析",
+      "check.unassessable": "暂无法评估",
+      "check.short": "至少需要 200 个有效字符才能评估。",
+      "check.tooLong": "当前最多支持 40,000 个有效字符、1,000 段文字。",
+      "check.pending": "请先结束录音并补全失败的转写片段。",
+      "check.invalid": "分析参数无效。",
+      "check.invalidResult": "模型标注不完整或格式不符，结果未保存，请重试。",
+      "check.changed": "转写或分析结果已有更新，请收起并重新打开会议体检后再试。",
+      "check.model": "请先选择本次分析使用的模型。",
+      "check.explanation": "按文字字符计算，排除空白和标点。无法判断的文字单独统计；达到 40% 时不出总分。该比例不表示会议浪费的时间。",
+      "check.counts": "可压缩 {removed} / 共 {total} 字符；待确认 {uncertain}%。",
+      "check.topic": "会议议题（可选）",
+      "check.language": "分析语言",
+      "check.topicHint": "不填写时，不判断跑题",
+      "check.preview": "查看将发送的全文（{n} 个有效字符）",
+      "check.consent": "将这份转写全文（{n} 个有效字符）及所填议题发送给 {model}，生成会议体检。文字可能含有姓名等隐私。是否继续？",
+      "check.analyze": "开始分析",
+      "check.regenerate": "重新分析",
+      "check.compact": "查看精简版",
+      "check.cancelled": "已取消分析。",
+      "check.locale": "zh",
+      "check.categories": "分类明细",
+      "check.repeat": "重复信息",
+      "check.filler": "填充语",
+      "check.offtopic": "可能跑题",
+      "check.uncertain": "待确认",
+      "check.keep": "需要保留",
+      "check.all": "查看标注",
+      "check.retain": "需要保留",
+      "check.undoRetain": "恢复模型判断",
+      "check.modelUsed": "模型：{model} · 分析议题：{topic}",
+      "check.noTopic": "未指定",
+      "check.parentTime": "回听所属发言段，非逐句时间戳",
+      "check.compactHint": "按原文顺序保留有用、待确认和人工保留的片段；请对照原文核对。",
+      "check.emptyCompact": "当前没有保留文字，请查看标注并核对。",
+      "check.noMatches": "此分类没有片段。",
       "meeting.installModel": "导入模型文件",
       "meeting.getModel": "下载模型文件",
       "meeting.installingModel": "正在校验模型文件…",
@@ -359,6 +403,50 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "check.title": "Meeting check (experimental)",
+      "check.headline": "Meeting verbosity",
+      "check.metric": "Compressible text share · model estimate",
+      "check.score": "Approximately {n}% compressible text",
+      "check.approx": "~{n}%",
+      "check.waiting": "Not analyzed",
+      "check.loading": "Loading",
+      "check.analyzing": "Analyzing",
+      "check.stale": "Analysis out of date",
+      "check.unassessable": "Not assessable",
+      "check.short": "At least 200 letters or numbers are required.",
+      "check.tooLong": "Currently limited to 40,000 letters or numbers and 1,000 text units.",
+      "check.pending": "Finish recording and retry missing transcription segments first.",
+      "check.invalid": "Invalid analysis parameters.",
+      "check.invalidResult": "Model annotations were incomplete or invalid. No result was saved. Try again.",
+      "check.changed": "The transcript or analysis changed. Close and reopen this panel to refresh.",
+      "check.model": "Select a model before analyzing.",
+      "check.explanation": "Counts letters and numbers, excluding spaces and punctuation. Uncertain text is counted separately; no score is shown at 40% or more. This is not wasted meeting time.",
+      "check.counts": "Compressible: {removed} / {total} characters; uncertain: {uncertain}%.",
+      "check.topic": "Meeting topic (optional)",
+      "check.language": "Analysis language",
+      "check.topicHint": "Leave blank to skip off-topic judgments",
+      "check.preview": "Preview full text to be sent ({n} letters/numbers)",
+      "check.consent": "Send the full transcript ({n} letters/numbers) and the entered topic to {model} for analysis? The text may contain names or other private information.",
+      "check.analyze": "Analyze",
+      "check.regenerate": "Analyze again",
+      "check.compact": "View compact text",
+      "check.cancelled": "Analysis cancelled.",
+      "check.locale": "en",
+      "check.categories": "Category breakdown",
+      "check.repeat": "Repetition",
+      "check.filler": "Filler",
+      "check.offtopic": "Possibly off-topic",
+      "check.uncertain": "Uncertain",
+      "check.keep": "Keep",
+      "check.all": "View annotations",
+      "check.retain": "Keep this text",
+      "check.undoRetain": "Restore model judgment",
+      "check.modelUsed": "Model: {model} · Topic used: {topic}",
+      "check.noTopic": "Not specified",
+      "check.parentTime": "Replay the parent turn; timestamps are not sentence-level",
+      "check.compactHint": "Keeps useful, uncertain and manually retained text in source order. Review against the original.",
+      "check.emptyCompact": "No retained text. Review the annotations.",
+      "check.noMatches": "No units in this category.",
       "meeting.installModel": "Import model file",
       "meeting.getModel": "Download model file",
       "meeting.installingModel": "Verifying model file…",
@@ -746,6 +834,16 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-loading { display: flex; align-items: center; gap: 8px; padding: 16px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .vls-input { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1, #aaa); border-radius: 6px; color: inherit; font: inherit; padding: 5px 8px; }
 .vls-search { width: min(100%, 260px); }
+.vls-check { display: grid; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); }
+.vls-check h3 { margin: 0; font-size: 14px; }
+.vls-check-overview { display: grid; grid-template-columns: minmax(180px, 240px) minmax(120px, 1fr); gap: 16px; align-items: center; }
+.vls-check-gauge { max-width: 240px; color: var(--dsw-alias-label-primary); }
+.vls-check-gauge svg { width: 100%; display: block; }
+.vls-check-unit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 10px; }
+.vls-check-unit blockquote { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
+.vls-check-evidence { max-height: 420px; overflow: auto; }
+.vls-check .vls-mini[aria-pressed="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); text-decoration: underline; }
+@media (max-width: 600px) { .vls-check-overview { grid-template-columns: 1fr; } }
 .vls-meeting { display: grid; gap: 8px; margin: 8px 0; }
 .vls-segments { display: grid; gap: 6px; padding: 0; margin: 8px 0; list-style: none; }
 .vls-segment { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; padding: 5px 0; border-bottom: 1px solid var(--dsw-alias-border-l1, #ddd); }
@@ -3311,6 +3409,174 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return { text, x: (rect.left + rect.right) / 2, top: rect.top, bottom: rect.bottom };
     }
 
+    function CheckGauge({ percent, t, state }) {
+      const ready = typeof percent === 'number';
+      const angle = Math.PI * (1 - (percent ?? 0) / 100);
+      const x = 120 + 79 * Math.cos(angle), y = 110 - 79 * Math.sin(angle);
+      return h('div', { className: 'vls-check-gauge', role: 'img',
+        'aria-label': ready ? t('check.score', { n: percent }) : t(`check.${state}`) },
+        h('svg', { viewBox: '0 0 240 158', 'aria-hidden': true },
+          h('path', { d: 'M 22 110 A 98 98 0 0 1 71 25.13', fill: 'none', stroke: '#41947b', strokeWidth: 12 }),
+          h('path', { d: 'M 71 25.13 A 98 98 0 0 1 169 25.13', fill: 'none', stroke: '#d2a246', strokeWidth: 12 }),
+          h('path', { d: 'M 169 25.13 A 98 98 0 0 1 218 110', fill: 'none', stroke: '#c8736a', strokeWidth: 12 }),
+          ready ? h('g', null,
+            h('line', { x1: 120, y1: 110, x2: x, y2: y, stroke: 'currentColor', strokeWidth: 3, strokeLinecap: 'round' }),
+            h('circle', { cx: 120, cy: 110, r: 5, fill: 'currentColor' }),
+          ) : null,
+          h('text', { x: 22, y: 135, textAnchor: 'middle', fill: 'currentColor', fontSize: 12 }, '0'),
+          h('text', { x: 120, y: 37, textAnchor: 'middle', fill: 'currentColor', fontSize: 11 }, '50'),
+          h('text', { x: 218, y: 135, textAnchor: 'middle', fill: 'currentColor', fontSize: 12 }, '100'),
+          h('text', { x: 120, y: 151, textAnchor: 'middle', fill: 'currentColor', fontSize: ready ? 27 : 15, fontWeight: 600 },
+            ready ? t('check.approx', { n: percent }) : t(`check.${state}`)),
+        ),
+      );
+    }
+
+    function MeetingCheck({ id, t, seek, audioAvailable, onChanged, sourceVersion }) {
+      const [data, setData] = React.useState(null);
+      const [topic, setTopic] = React.useState('');
+      const [filter, setFilter] = React.useState('all');
+      const [error, setError] = React.useState('');
+      const [stage, setStage] = React.useState('loading');
+      const [compact, setCompact] = React.useState(false);
+      const [language, setLanguage] = React.useState(t('check.locale'));
+      const activeRequest = React.useRef(null);
+      const endpoint = `/recordings/${id}/check`;
+      const source = data?.source, analysis = data?.check;
+      const pending = ['loading', 'analyzing', 'saving'].includes(stage);
+
+      const failureText = (failure) => Object.hasOwn(EN, `check.${failure.code}`)
+        ? t(`check.${failure.code}`) : messageOf(failure);
+
+      React.useEffect(() => {
+        setStage('loading');
+        setData(null);
+        const controller = new AbortController();
+        fetch(`${API}${endpoint}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+          .then(readJsonResponse)
+          .then((body) => { if (!controller.signal.aborted) { setData(body); setTopic(body.check?.topic ?? ''); setLanguage(body.check?.language ?? t('check.locale')); setStage('idle'); } })
+          .catch((failure) => { if (!controller.signal.aborted) { setError(failureText(failure)); setStage('idle'); } });
+        return () => { controller.abort(); activeRequest.current?.abort(); };
+      }, [endpoint, sourceVersion]);
+
+      async function analyze() {
+        if (pending || source?.state !== 'ready') return;
+        setError('');
+        const controller = new AbortController();
+        activeRequest.current = controller;
+        setStage('analyzing');
+        store.set((state) => ({ ...state, checkJobs: (state.checkJobs ?? 0) + 1 }));
+        try {
+          const model = (await fetchStatus()).model;
+          if (!modelKey(model)) throw new Error(t('model.unavailable'));
+          controller.signal.throwIfAborted();
+          if (!window.confirm(t('check.consent', {
+            model: `${model.provider} / ${model.model}`, n: source.chars,
+          }))) return;
+          const response = await fetch(`${API}${endpoint}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sourceHash: source.hash, analysisId: analysis?.id ?? null, revision: analysis?.revision ?? 0, topic, model, language }),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(310_000)]),
+          });
+          const body = await readJsonResponse(response);
+          setData((previous) => ({ ...previous, check: body.check }));
+          setCompact(false);
+          setFilter('all');
+          onChanged();
+        } catch (failure) {
+          setError(controller.signal.aborted ? t('check.cancelled') : failureText(failure));
+        } finally {
+          activeRequest.current = null;
+          setStage('idle');
+          store.set((state) => ({ ...state, checkJobs: Math.max(0, (state.checkJobs ?? 0) - 1) }));
+        }
+      }
+
+      async function retain(unit) {
+        if (pending) return;
+        setStage('saving'); setError('');
+        try {
+          const body = await request(endpoint, { method: 'PATCH', json: {
+            analysisId: analysis.id, unitId: unit.id, retained: !unit.retained,
+          } });
+          setData((previous) => ({ ...previous, check: body.check }));
+          onChanged();
+        } catch (failure) { setError(failureText(failure)); }
+        finally { setStage('idle'); }
+      }
+
+      const gaugeState = stage === 'analyzing' ? 'analyzing' : stage === 'loading' ? 'loading'
+        : analysis?.stale ? 'stale' : analysis ? 'unassessable' : source?.state === 'ready' ? 'waiting' : 'unassessable';
+      const percent = stage === 'analyzing' || stage === 'loading' ? null : analysis?.percent ?? null;
+      const cats = ['repeat', 'filler', 'offtopic', 'uncertain', 'keep'];
+      const rows = analysis?.units.filter((unit) => filter === 'all'
+        ? unit.category !== 'keep' || unit.retained
+        : filter === 'keep' ? unit.category === 'keep' || unit.retained : unit.category === filter && !unit.retained);
+
+      return h('section', { className: 'vls-check', 'aria-label': t('check.title') },
+        h('h3', null, t('check.title')),
+        h('div', { className: 'vls-check-overview' },
+          h('div', null, h('div', { className: 'vl-label' }, t('check.headline')),
+            h(CheckGauge, { percent, t, state: gaugeState }),
+            h('p', { className: 'vl-note' }, t('check.metric'))),
+          h('div', null,
+            h('p', { className: 'vl-note' }, t('check.explanation')),
+            analysis ? h('p', { className: 'vl-note' },
+              t('check.counts', { removed: analysis.removed, total: analysis.total, uncertain: analysis.uncertain })) : null,
+            source && source.state !== 'ready' ? h('p', { className: 'vl-note' }, t(`check.${source.state}`)) : null,
+            analysis?.stale ? h('p', { className: 'vls-error' }, t('check.changed')) : null,
+          )),
+        h('label', { className: 'vls-lang' }, t('check.topic'),
+          h('input', { className: 'vls-input', value: topic, maxLength: 300, disabled: pending,
+            placeholder: t('check.topicHint'), onChange: (event) => setTopic(event.target.value) })),
+        h('details', null, h('summary', { className: 'vl-note' }, t('check.preview', { n: source?.chars ?? 0 })),
+          h('p', { className: 'vls-report-text' }, source?.text || '—')),
+        h('label', { className: 'vls-lang' }, t('check.language'),
+          h('select', { className: 'vl-select', value: language, disabled: pending,
+            onChange: (event) => setLanguage(event.target.value) },
+            h('option', { value: 'zh' }, '简体中文'), h('option', { value: 'en' }, 'English'))),
+        h('div', { className: 'vls-options-row' },
+          h('button', { type: 'button', className: 'vl-btn', disabled: pending || source?.state !== 'ready',
+            onClick: analyze }, t(analysis ? 'check.regenerate' : 'check.analyze')),
+          stage === 'analyzing' ? h('button', { type: 'button', className: 'vls-mini',
+            onClick: () => activeRequest.current?.abort() }, t('studio.cancel')) : null,
+          analysis && !analysis.stale ? h('button', { type: 'button', className: 'vls-mini', 'aria-expanded': compact,
+            onClick: () => setCompact(!compact) }, t('check.compact')) : null,
+        ),
+        error ? h('p', { className: 'vls-error', role: 'alert' }, error) : null,
+        analysis ? h(React.Fragment, null,
+          h('p', { className: 'vl-note' }, t('check.modelUsed', {
+            model: `${analysis.model.provider} / ${analysis.model.model}`, topic: analysis.topic || t('check.noTopic'),
+          })),
+          h('div', { className: 'vls-options-row', role: 'group', 'aria-label': t('check.categories') },
+            h('button', { type: 'button', className: 'vls-mini', 'aria-pressed': filter === 'all',
+              onClick: () => setFilter('all') }, t('check.all')),
+            cats.map((category) => h('button', { key: category, type: 'button', className: 'vls-mini',
+              'aria-pressed': filter === category, onClick: () => setFilter(category) },
+              t(`check.${category}`), ' ', analysis.total ? Math.round(analysis.counts[category] / analysis.total * 100) : 0, '%')),
+          ),
+          compact && !analysis.stale ? h('div', null,
+            h('p', { className: 'vl-note' }, t('check.compactHint')),
+            h('p', { className: 'vls-report-text' }, analysis.compact || t('check.emptyCompact'))) : null,
+          h('ol', { className: 'vls-segments vls-check-evidence' }, rows.map((unit) =>
+            h('li', { className: 'vls-check-unit', key: unit.id },
+              h('div', { className: 'vls-options-row' },
+                h('b', null, t(`check.${unit.retained ? 'keep' : unit.category}`)),
+                unit.start !== null && audioAvailable ? h('button', { type: 'button', className: 'vls-mini',
+                  title: t('check.parentTime'), onClick: () => seek(unit.start) }, formatTime(unit.start)) : null,
+                unit.category !== 'keep' ? h('button', { type: 'button', className: 'vls-mini', disabled: pending || analysis.stale,
+                  'aria-pressed': unit.retained, onClick: () => void retain(unit) },
+                  t(unit.retained ? 'check.undoRetain' : 'check.retain')) : null,
+              ),
+              h('blockquote', null, unit.text),
+              h('p', { className: 'vl-note' }, unit.reason),
+            ),
+          )),
+          !rows.length ? h('p', { className: 'vl-note' }, t('check.noMatches')) : null,
+        ) : null,
+      );
+    }
+
     function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion, meetingJob }) {
       const [details, setDetails] = React.useState(null);
       const [expanded, setExpanded] = React.useState(false);
@@ -3674,6 +3940,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
             disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
           }, t('import.retranscribe')) : null,
+          !active && (hasTranscript || item.hasCheck) ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'check',
+            onClick: () => setTool(tool === 'check' ? '' : 'check'),
+          }, t('check.title')) : null,
           !active && (hasTranscript || item.hasReport) ? h('button', {
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
             onClick: () => setTool(tool === 'report' ? '' : 'report'),
@@ -3721,6 +3991,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           itemMeetingJob.active ? h('button', { type: 'button', className: 'vls-mini',
             onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
         ) : null,
+        tool === 'check' ? h(MeetingCheck, { id: item.id, t, seek,
+          audioAvailable: Boolean(item.audioUrl), onChanged,
+          sourceVersion: JSON.stringify([refreshVersion, details?.text, details?.correctedText, details?.meeting?.revision, details?.pendingCount]) }) : null,
         tool === 'meeting' ? speakerPanel() : null,
         tool === 'transcribe' ? h('div', { className: 'vls-options-row' },
           h('label', { className: 'vls-lang' }, t('language.title'),
@@ -3813,7 +4086,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function UpdateControl({ state, t }) {
       const [view, setView] = React.useState({ state: 'checking' });
-      const busy = state.importing || state.retrySaving || state.preparing || state.reporting || state.meetingJob?.active ||
+      const busy = state.importing || state.retrySaving || state.preparing || state.reporting || state.meetingJob?.active || state.checkJobs > 0 ||
         state.editing || state.translating || ['requesting', 'recording', 'finishing'].includes(state.phase);
 
       async function check(refresh = false) {

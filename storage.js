@@ -7,6 +7,7 @@
  */
 
 import { constants } from 'node:fs';
+import { checkSource, CheckError } from './meeting-check.js';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -435,6 +436,30 @@ export function createRecordingStore(directory) {
         if (part.state !== 'ready') throw new StorageError(409, '片段尚未完成识别');
         if (value === null) delete part.correction;
         else part.correction = value.trim();
+      });
+    },
+
+    saveCheck(id, check, previous, signal) {
+      return change(id, (meta) => {
+        signal?.throwIfAborted();
+        const source = checkSource(meta);
+        if (source.state !== 'ready' || source.hash !== check.sourceHash ||
+            (meta.check?.id ?? null) !== previous.id || (meta.check?.revision ?? 0) !== previous.revision) throw new CheckError('changed', 409);
+        meta.check = check;
+      });
+    },
+
+    retainCheckUnit(id, analysisId, unitId, retained) {
+      return change(id, (meta) => {
+        const source = checkSource(meta);
+        if (!meta.check || meta.check.id !== analysisId ||
+            meta.check.sourceHash !== source.hash || source.state !== 'ready') {
+          throw new CheckError('changed', 409);
+        }
+        const label = meta.check.labels.find((row) => row.id === unitId);
+        if (!label) throw new CheckError('invalid', 400);
+        label.retained = retained;
+        meta.check.revision += 1;
       });
     },
 

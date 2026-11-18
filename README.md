@@ -39,6 +39,18 @@ v0.0.3 新增。
 
 运行 `npm test` 执行测试，运行 `npm pack --ignore-scripts` 生成安装包。许可证：[MIT](LICENSE)。
 
+## 会议体检（开发分支）
+
+`meeting-check` 分支新增实验功能，尚未包含在上面的 v0.0.3 正式安装包中。在历史卡片点击「会议体检（实验）」，预览将发送的全文，选择中文或英文。确认界面所示模型后开始分析；可随时取消。
+
+- 半圆表盘显示「废话含量」：模型标为重复信息、填充语或偏离指定议题的有效字符数，占全文有效字符数的比例。字符统计排除空白和标点。没有填写议题时不判断跑题。
+- 可查看各分类的原文和理由，回听所属发言段，将误判片段标为「需要保留」。比例在本机重算，不再调用模型。
+- 精简版按原文顺序保留有用内容、待确认及人工保留片段。转写变更后旧结果失效，需要重新分析。
+
+支持已完成的转写，范围为 200–40,000 个有效字符、最多 80,000 个原始字符及 1,000 个分析片段。待确认文字达到 40% 时不显示总比例；这是实验规则，尚未经过真实会议数据校准。该比例不表示会议浪费的时间，也不评价参会者。
+
+分析前会确认模型并预览全文；全文及所填议题会交给该模型，长文本可能分批重复提供上下文。模型服务的费用和数据处理方式取决于你的配置。结果仅在本机保存，不覆盖原录音或转写。当前测试覆盖计数、引用对应、人工保留、取消及并发修改，尚未验证真实模型判断的准确性。「潜台词报告」仍为草案，未实现。
+
 ## English
 
 Voice Notes provides local audio transcription, speaker diarization, meeting summaries and transcript search for DeepSeek Harness Desktop on macOS Apple Silicon and Windows x64.
@@ -67,3 +79,13 @@ Added in v0.0.3.
 Enable **Multi-speaker meeting** before recording or importing, or select **Identify speakers** for an existing recording. Speaker labels are added after recording or import. The limit is 60 minutes and 128 MiB. The first run downloads about 38 MiB of model data. If the download fails, import the model file in the studio. Open **Speaker transcript** to rename speakers, correct attribution, replay or export. Reports and shared drafts include timestamps and speaker labels. Set the speaker count when known and review overlapping speech. Import an audio file for online meetings.
 
 Run `npm test` to test the plugin and `npm pack --ignore-scripts` to build the installation package.
+
+### Meeting check (development branch)
+
+The `meeting-check` branch adds an experimental analysis panel. It is not included in the v0.0.3 release linked above. Open **Meeting check (experimental)** on a history card, preview the transcript, choose Chinese or English, and confirm the displayed model before analyzing. Analysis can be canceled.
+
+The dial shows the share of letters and numbers classified as redundant repetition, filler or unrelated to the supplied topic. It measures text, not wasted meeting time. Without a topic, off-topic classification is disabled. Inspect original passages and reasons, replay their parent turns, and mark passages to retain. Retention recalculates the result locally. The compact text keeps useful, uncertain and manually retained passages in source order. Transcript edits invalidate previous results.
+
+Completed transcripts must contain 200–40,000 letters and numbers, no more than 80,000 raw characters and 1,000 analysis units. The dial is withheld when at least 40% is uncertain. This experimental threshold has not been calibrated against real meetings.
+
+The selected model receives the full transcript and optional topic after confirmation. Context may be sent repeatedly across batches. Provider charges and data handling depend on your configuration. Results are stored locally, separately from the original audio and transcript. Automated tests cover counting, source alignment, retention, cancellation and conflicting edits; real-model judgment quality has not yet been evaluated. The proposed interpretation report is not implemented.

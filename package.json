@@ -13,6 +13,7 @@
     "index.js",
     "storage.js",
     "meeting.js",
+    "meeting-check.js",
     "meeting-worker.js",
     "meeting-models/segmentation.onnx",
     "meeting-models/LICENSE",
