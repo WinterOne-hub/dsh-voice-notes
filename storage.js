@@ -8,6 +8,7 @@
 
 import { constants } from 'node:fs';
 import { checkSource, CheckError } from './meeting-check.js';
+import { interpretationSource } from './meeting-interpretation.js';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -446,6 +447,16 @@ export function createRecordingStore(directory) {
         if (source.state !== 'ready' || source.hash !== check.sourceHash ||
             (meta.check?.id ?? null) !== previous.id || (meta.check?.revision ?? 0) !== previous.revision) throw new CheckError('changed', 409);
         meta.check = check;
+      });
+    },
+
+    saveInterpretation(id, interpretation, previousId, signal) {
+      return change(id, (meta) => {
+        signal?.throwIfAborted();
+        const source = interpretationSource(meta);
+        if (source.state !== 'ready' || source.hash !== interpretation.sourceHash ||
+            (meta.interpretation?.id ?? null) !== previousId) throw new CheckError('changed', 409);
+        meta.interpretation = interpretation;
       });
     },
 

@@ -49,7 +49,13 @@ v0.0.3 新增。
 
 支持已完成的转写，范围为 200–40,000 个有效字符、最多 80,000 个原始字符及 1,000 个分析片段。待确认文字达到 40% 时不显示总比例；这是实验规则，尚未经过真实会议数据校准。该比例不表示会议浪费的时间，也不评价参会者。
 
-分析前会确认模型并预览全文；全文及所填议题会交给该模型，长文本可能分批重复提供上下文。模型服务的费用和数据处理方式取决于你的配置。结果仅在本机保存，不覆盖原录音或转写。当前测试覆盖计数、引用对应、人工保留、取消及并发修改，尚未验证真实模型判断的准确性。「潜台词报告」仍为草案，未实现。
+分析前会确认模型并预览全文；全文及所填议题会交给该模型，长文本可能分批重复提供上下文。模型服务的费用和数据处理方式取决于你的配置。结果仅在本机保存，不覆盖原录音或转写。当前测试覆盖计数、引用对应、人工保留、取消及并发修改，尚未验证真实模型判断的准确性。
+
+### 表达解读（潜台词）
+
+同一开发分支的另一项实验功能。在历史卡片打开「表达解读（潜台词）」，预览全文、选择中英文并确认模型后生成报告。每份最多 8 条，分为原话、字面信息、可能含义、其他解释、不确定之处和澄清问法。原话及时间戳从转写提取，可回听所属发言段、查看相邻原文或导出 TXT。
+
+不强制推测潜台词：没有需要解读的表达时返回空报告，上下文不足时标为「无法判断」。重叠发言或归属不明的片段会由程序设为「无法判断」；说话人归属修改后需要重新生成。推测不代表真实意图或事实，模型指令排除心理、人格评价和置信度分数。输入范围与会议体检相同。每条录音分别保存最新的体检和表达解读，互不覆盖；失败或取消保留旧结果，转写变更后旧报告失效。导出包含原话及相邻上下文，请按录音资料管理。真实会议解读质量尚未验证。
 
 ## English
 
@@ -88,4 +94,10 @@ The dial shows the share of letters and numbers classified as redundant repetiti
 
 Completed transcripts must contain 200–40,000 letters and numbers, no more than 80,000 raw characters and 1,000 analysis units. The dial is withheld when at least 40% is uncertain. This experimental threshold has not been calibrated against real meetings.
 
-The selected model receives the full transcript and optional topic after confirmation. Context may be sent repeatedly across batches. Provider charges and data handling depend on your configuration. Results are stored locally, separately from the original audio and transcript. Automated tests cover counting, source alignment, retention, cancellation and conflicting edits; real-model judgment quality has not yet been evaluated. The proposed interpretation report is not implemented.
+The selected model receives the full transcript and optional topic after confirmation. Context may be sent repeatedly across batches. Provider charges and data handling depend on your configuration. Results are stored locally, separately from the original audio and transcript. Automated tests cover counting, source alignment, retention, cancellation and conflicting edits; real-model judgment quality has not yet been evaluated.
+
+### Expression interpretation (subtext)
+
+Another experimental feature on the same branch. Open the panel on a history card, preview the full transcript, choose Chinese or English, and confirm the displayed model. Up to eight entries separate original words, literal readings, possible meanings, alternative explanations, uncertainty and neutral clarifying questions. Quotes and timestamps are resolved from the transcript. Replay the parent turn, inspect adjacent source text or export TXT.
+
+An empty report is allowed when no expression needs interpretation; insufficient context is marked **Cannot determine**. Overlapping or unattributed passages are programmatically marked uncertain. Attribution edits invalidate the report. Inferences are not verified intent or facts. The prompt excludes psychological or personality assessments and confidence scores. Input limits match Meeting check. Each recording stores the latest check and interpretation separately. Failed or canceled requests preserve previous results; transcript changes invalidate old reports. Exports include quotes and adjacent context. Real-meeting interpretation quality has not yet been evaluated.

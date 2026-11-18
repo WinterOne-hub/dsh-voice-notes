@@ -106,6 +106,26 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      'interpret.title': '表达解读（潜台词）',
+      'interpret.topicHint': '可填写会议背景，帮助理解上下文',
+      'interpret.notice': '实验功能。以下为可能解释，不代表真实意图或事实；请结合上下文核对，必要时直接向对方确认。',
+      'interpret.consent': '将这份转写全文（{n} 个有效字符）及所填议题发送给 {model}，生成表达解读（潜台词）。文字可能含有姓名等隐私。是否继续？',
+      'interpret.invalidResult': '模型引用或报告格式不符，结果未保存，请重试。',
+      'interpret.changed': '转写或表达解读已有更新，请收起后重新打开再试。',
+      'interpret.empty': '未发现需要解读的表达。无需为普通表述推测潜台词。',
+      'interpret.literal': '字面信息',
+      'interpret.possible': '可能含义（推测）',
+      'interpret.alternatives': '其他解释',
+      'interpret.uncertainty': '不确定之处',
+      'interpret.question': '澄清问法',
+      'interpret.unknown': '无法判断',
+      'interpret.attribution': '该段有重叠发言或说话人归属不明，暂不推测含义。',
+      'interpret.quote': '原话',
+      'interpret.context': '查看相邻原文',
+      'interpret.before': '前文',
+      'interpret.after': '后文',
+      'interpret.waiting': '分析后会列出原话、可能含义、其他解释和澄清问法；最多 8 条。',
+      'interpret.export': '导出解读 TXT',
       "check.title": "会议体检（实验）",
       "check.headline": "废话含量",
       "check.metric": "可压缩文字占比 · 模型估计",
@@ -403,6 +423,26 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      'interpret.title': 'Expression interpretation (subtext)',
+      'interpret.topicHint': 'Optional meeting background for context',
+      'interpret.notice': 'Experimental. These are possible readings, not verified intent or facts. Check the context and ask the speaker when clarification is needed.',
+      'interpret.consent': 'Send the full transcript ({n} letters and numbers) and the optional topic to {model} for expression interpretation (subtext)? The text may contain names and other private details.',
+      'interpret.invalidResult': 'The model returned invalid references or report data. Nothing was saved. Please retry.',
+      'interpret.changed': 'The transcript or interpretation changed. Close and reopen this panel before retrying.',
+      'interpret.empty': 'No expressions requiring interpretation were found. Ordinary statements do not need invented subtext.',
+      'interpret.literal': 'Literal reading',
+      'interpret.possible': 'Possible meaning (inference)',
+      'interpret.alternatives': 'Other explanations',
+      'interpret.uncertainty': 'Uncertainty',
+      'interpret.question': 'Clarifying question',
+      'interpret.unknown': 'Cannot determine',
+      'interpret.attribution': 'Overlapping speech or uncertain attribution: interpretation withheld.',
+      'interpret.quote': 'Original words',
+      'interpret.context': 'View adjacent source text',
+      'interpret.before': 'Before',
+      'interpret.after': 'After',
+      'interpret.waiting': 'Analysis lists original words, possible readings, alternatives and clarifying questions, with up to eight entries.',
+      'interpret.export': 'Export interpretation TXT',
       "check.title": "Meeting check (experimental)",
       "check.headline": "Meeting verbosity",
       "check.metric": "Compressible text share · model estimate",
@@ -842,6 +882,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-check-unit { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 10px; }
 .vls-check-unit blockquote { white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0; }
 .vls-check-evidence { max-height: 420px; overflow: auto; }
+.vls-interpretation dl { margin: 12px 0 0; overflow-wrap: anywhere; }
+.vls-interpretation dt { margin-top: 10px; font-weight: 600; font-size: 12px; }
+.vls-interpretation dd { margin: 4px 0 0; white-space: pre-wrap; }
+.vls-interpretation dd ul { margin: 4px 0; padding-left: 20px; }
+.vls-interpretation .vls-check-unit { min-width: 0; }
+.vls-interpretation > .vl-note { margin: 0; }
 .vls-check .vls-mini[aria-pressed="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); text-decoration: underline; }
 @media (max-width: 600px) { .vls-check-overview { grid-template-columns: 1fr; } }
 .vls-meeting { display: grid; gap: 8px; margin: 8px 0; }
@@ -3577,6 +3623,112 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       );
     }
 
+    function MeetingInterpretation({ id, t, seek, audioAvailable, onChanged, sourceVersion }) {
+      const [data, setData] = React.useState(null);
+      const [topic, setTopic] = React.useState('');
+      const [language, setLanguage] = React.useState(t('check.locale'));
+      const [stage, setStage] = React.useState('loading');
+      const [error, setError] = React.useState('');
+      const activeRequest = React.useRef(null);
+      const endpoint = `/recordings/${id}/interpretation`;
+      const source = data?.source, report = data?.report;
+      const pending = stage !== 'idle';
+      const failureText = (failure) => Object.hasOwn(EN, `interpret.${failure.code}`)
+        ? t(`interpret.${failure.code}`) : Object.hasOwn(EN, `check.${failure.code}`)
+          ? t(`check.${failure.code}`) : messageOf(failure);
+
+      React.useEffect(() => {
+        setData(null); setStage('loading'); setError('');
+        const controller = new AbortController();
+        fetch(`${API}${endpoint}`, { cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]) })
+          .then(readJsonResponse)
+          .then((body) => {
+            if (controller.signal.aborted) return;
+            setData(body); setTopic(body.report?.topic ?? '');
+            setLanguage(body.report?.language ?? t('check.locale')); setStage('idle');
+          })
+          .catch((failure) => { if (!controller.signal.aborted) { setError(failureText(failure)); setStage('idle'); } });
+        return () => { controller.abort(); activeRequest.current?.abort(); };
+      }, [endpoint, sourceVersion]);
+
+      async function analyze() {
+        if (pending || source?.state !== 'ready') return;
+        const controller = new AbortController();
+        activeRequest.current = controller;
+        setError(''); setStage('analyzing');
+        store.set((state) => ({ ...state, checkJobs: (state.checkJobs ?? 0) + 1 }));
+        try {
+          const model = (await fetchStatus()).model;
+          if (!modelKey(model)) throw new Error(t('model.unavailable'));
+          controller.signal.throwIfAborted();
+          if (!window.confirm(t('interpret.consent', { model: `${model.provider} / ${model.model}`, n: source.chars }))) return;
+          const response = await fetch(`${API}${endpoint}`, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sourceHash: source.hash, analysisId: report?.id ?? null, topic, language, model }),
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(310_000)]),
+          });
+          const body = await readJsonResponse(response);
+          controller.signal.throwIfAborted();
+          setData((previous) => ({ ...previous, report: body.report }));
+          onChanged();
+        } catch (failure) { setError(controller.signal.aborted ? t('check.cancelled') : failureText(failure)); }
+        finally {
+          activeRequest.current = null; setStage('idle');
+          store.set((state) => ({ ...state, checkJobs: Math.max(0, (state.checkJobs ?? 0) - 1) }));
+        }
+      }
+
+      return h('section', { className: 'vls-check vls-interpretation', 'aria-label': t('interpret.title') },
+        h('h3', null, t('interpret.title')),
+        h('p', { className: 'vl-note' }, t('interpret.notice')),
+        h('label', { className: 'vls-lang' }, t('check.topic'),
+          h('input', { className: 'vls-input', value: topic, maxLength: 300, disabled: pending,
+            placeholder: t('interpret.topicHint'), onChange: (event) => setTopic(event.target.value) })),
+        h('label', { className: 'vls-lang' }, t('check.language'),
+          h('select', { className: 'vl-select', value: language, disabled: pending,
+            onChange: (event) => setLanguage(event.target.value) },
+            h('option', { value: 'zh' }, '简体中文'), h('option', { value: 'en' }, 'English'))),
+        h('details', null, h('summary', { className: 'vl-note' }, t('check.preview', { n: source?.chars ?? 0 })),
+          h('p', { className: 'vls-report-text' }, source?.text || '—')),
+        source && source.state !== 'ready' ? h('p', { className: 'vl-note' }, t(`check.${source.state}`)) : null,
+        report?.stale ? h('p', { className: 'vls-error', role: 'status' }, t('interpret.changed')) : null,
+        h('div', { className: 'vls-options-row' },
+          h('button', { type: 'button', className: 'vl-btn', disabled: pending || source?.state !== 'ready', onClick: analyze },
+            t(report ? 'check.regenerate' : 'check.analyze')),
+          stage === 'analyzing' ? h('button', { type: 'button', className: 'vls-mini', onClick: () => activeRequest.current?.abort() }, t('studio.cancel')) : null,
+          report && !report.stale && !pending ? h('a', { className: 'vls-mini', download: true,
+            href: `${API}${endpoint}?format=txt&locale=${report.language}` }, t('interpret.export')) : null,
+        ),
+        pending ? h('p', { className: 'vl-note', role: 'status' }, t(`check.${stage}`)) : null,
+        error ? h('p', { className: 'vls-error', role: 'alert' }, error) : null,
+        !report && !pending ? h('p', { className: 'vl-note' }, t('interpret.waiting')) : null,
+        report ? h(React.Fragment, null,
+          h('p', { className: 'vl-note' }, t('check.modelUsed', {
+            model: `${report.model.provider} / ${report.model.model}`, topic: report.topic || t('check.noTopic'),
+          }), ' · ', formatDate(Date.parse(report.createdAt))),
+          !report.items.length && !report.stale ? h('p', { className: 'vl-note' }, t('interpret.empty')) : null,
+          h('ol', { className: 'vls-segments' }, report.items.map((item) => h('li', { className: 'vls-check-unit', key: item.unitIds.join('-') },
+            h('div', { className: 'vls-options-row' }, h('b', null, t('interpret.quote')),
+              item.start !== null && audioAvailable ? h('button', { type: 'button', className: 'vls-mini',
+                title: t('check.parentTime'), onClick: () => seek(item.start) }, formatTime(item.start)) : null),
+            h('blockquote', null, item.quote),
+            item.before || item.after ? h('details', null,
+              h('summary', { className: 'vl-note' }, t('interpret.context')),
+              item.before ? h('p', { className: 'vls-report-text' }, t('interpret.before'), '：', item.before) : null,
+              item.after ? h('p', { className: 'vls-report-text' }, t('interpret.after'), '：', item.after) : null) : null,
+            h('dl', null,
+              h('dt', null, t('interpret.literal')), h('dd', null, item.literal),
+              h('dt', null, t('interpret.possible')), h('dd', null, item.status === 'uncertain' ? t('interpret.unknown') : item.possible),
+              h('dt', null, t('interpret.alternatives')), h('dd', null, h('ul', null, item.alternatives.map((value, i) => h('li', { key: i }, value)))),
+              h('dt', null, t('interpret.uncertainty')), h('dd', null,
+                item.attributionUncertain ? t('interpret.attribution') + ' ' : '', item.uncertainty),
+              h('dt', null, t('interpret.question')), h('dd', null, item.question),
+            ),
+          ))),
+        ) : null,
+      );
+    }
+
     function HistoryItem({ item, t, query, onChanged, copy, copiedId, removeItem, importing, refreshVersion, meetingJob }) {
       const [details, setDetails] = React.useState(null);
       const [expanded, setExpanded] = React.useState(false);
@@ -3944,6 +4096,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'check',
             onClick: () => setTool(tool === 'check' ? '' : 'check'),
           }, t('check.title')) : null,
+          !active && (hasTranscript || item.hasInterpretation) ? h('button', {
+            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'interpretation',
+            onClick: () => setTool(tool === 'interpretation' ? '' : 'interpretation'),
+          }, t('interpret.title')) : null,
           !active && (hasTranscript || item.hasReport) ? h('button', {
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
             onClick: () => setTool(tool === 'report' ? '' : 'report'),
@@ -3992,6 +4148,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             onClick: () => engine.meetingAbort?.abort() }, t('studio.cancel')) : null,
         ) : null,
         tool === 'check' ? h(MeetingCheck, { id: item.id, t, seek,
+          audioAvailable: Boolean(item.audioUrl), onChanged,
+          sourceVersion: JSON.stringify([refreshVersion, details?.text, details?.correctedText, details?.meeting?.revision, details?.pendingCount]) }) : null,
+        tool === 'interpretation' ? h(MeetingInterpretation, { id: item.id, t, seek,
           audioAvailable: Boolean(item.audioUrl), onChanged,
           sourceVersion: JSON.stringify([refreshVersion, details?.text, details?.correctedText, details?.meeting?.revision, details?.pendingCount]) }) : null,
         tool === 'meeting' ? speakerPanel() : null,

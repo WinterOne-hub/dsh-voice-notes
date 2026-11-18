@@ -74,6 +74,7 @@ async function fixture(t) {
           if (state.waitModel) await state.waitModel;
           return { async *stream(options) {
             state.lastModelInput = options.messages[0].content[0].text;
+            state.lastModelSystem = options.system;
             yield { type: 'text-delta', text: state.checkResult ? state.checkResult(options) : 'Edited output' };
           } };
         } },
@@ -106,6 +107,7 @@ async function fixture(t) {
       Object.assign(res, { status, headers, headersSent: true });
     };
     if (path.endsWith('/check') && method === 'POST') state.checkResponse = res;
+    if (path.endsWith('/interpretation') && method === 'POST') state.interpretationResponse = res;
     const finished = once(res, 'finish');
     await route.handler(req, res);
     await finished;
@@ -191,7 +193,7 @@ test('failed segment can be retried and concurrent derived updates preserve the 
 async function bootClient(t, call, preferences = {}, runtime = {}) {
   const rawSource = await readFile(new URL('../client.js', import.meta.url), 'utf8');
   const source = rawSource.replace(/^    return \{\r?\n      inject: \['slots',/m, (registration) =>
-    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, translate };\n' + registration);
+    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, MeetingInterpretation, translate };\n' + registration);
   assert.ok(source !== rawSource, 'The test harness must expose the client factory helpers');
   const methods = { connect() {}, disconnect() {} };
   const stream = { getTracks: () => [] };
@@ -410,6 +412,9 @@ test('every voice endpoint requires the signed desktop browser session and rejec
     [`/recordings/${recording.id}/check`, 'GET'],
     [`/recordings/${recording.id}/check`, 'POST', {}],
     [`/recordings/${recording.id}/check`, 'PATCH', {}],
+    [`/recordings/${recording.id}/interpretation`, 'GET'],
+    [`/recordings/${recording.id}/interpretation?format=txt`, 'GET'],
+    [`/recordings/${recording.id}/interpretation`, 'POST', {}],
     ['/transcribe', 'POST', {}],
     ['/recordings', 'GET'],
     ['/recordings', 'POST', { text: 'fixture' }],
@@ -817,7 +822,7 @@ test('closing an active analysis aborts its model signal and preserves the saved
   assert.equal((await call(path)).data.check.id, saved.id);
 });
 
-test('the dial handles zero, maximum and unavailable scores, and consent cancellation sends no transcript', async (t) => {
+test('analysis panels require consent; the dial and uncertain interpretations render correctly', async (t) => {
   const { call, state, dataRoot } = await fixture(t);
   const saved = await createRecordingStore(join(dataRoot, 'recordings')).save({ text: '会议安排与测试确认。'.repeat(80) });
   const slots = [], effects = [];
@@ -842,18 +847,139 @@ test('the dial handles zero, maximum and unavailable scores, and consent cancell
     assert.equal(Boolean(needle), percent !== null);
     if (needle) assert.ok(Number.isFinite(needle.props.x2) && Number.isFinite(needle.props.y2));
   }
-  const render = () => {
-    index = 0;
-    return voice.MeetingCheck({ id: saved.id, t: tLabel, seek() {}, onChanged() {} });
-  };
-  render();
-  const cleanup = effects.shift()();
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  let tree = render();
-  const generate = nodes(tree).find((node) => node.type === 'button' && node.children.includes('开始分析'));
-  assert.equal(generate.props.disabled, false);
-  await generate.props.onClick();
+  for (const Component of [voice.MeetingCheck, voice.MeetingInterpretation]) {
+    slots.length = 0; effects.length = 0;
+    const render = () => {
+      index = 0;
+      return Component({ id: saved.id, t: tLabel, seek() {}, onChanged() {} });
+    };
+    render();
+    const cleanup = effects.shift()();
+    const deadline = Date.now() + 2000;
+    while (!slots[0] && Date.now() < deadline) await new Promise((resolve) => setImmediate(resolve));
+    let tree = render();
+    let generate = nodes(tree).find((node) => node.type === 'button' && node.children.includes('开始分析'));
+    assert.equal(generate.props.disabled, false);
+    await generate.props.onClick();
+    assert.equal(state.modelCalls, 0);
+    assert.equal(voice.store.get().checkJobs, 0);
+    if (Component === voice.MeetingInterpretation) {
+      assert.ok(nodes(tree).some((node) => node.children.includes('表达解读（潜台词）')));
+      approved = true;
+      state.checkResult = () => interpretationFixture('uncertain');
+      nodes(tree).find((node) => node.type === 'select').props.onChange({ target: { value: 'en' } });
+      tree = render();
+      generate = nodes(tree).find((node) => node.type === 'button' && node.children.includes('开始分析'));
+      await generate.props.onClick();
+      tree = render();
+      assert.equal(state.modelCalls, 1);
+      assert.match(state.lastModelSystem, /English/);
+      assert.ok(nodes(tree).some((node) => node.children.includes('无法判断')));
+      assert.ok(nodes(tree).some((node) => node.type === 'a' && node.props.href.includes('format=txt')));
+      assert.equal(voice.store.get().checkJobs, 0);
+    }
+    cleanup();
+  }
+});
+
+const interpretationFixture = (status = 'possible') => JSON.stringify({ items: [{
+  unitIds: [1], status, literal: '明确提出了测试安排。',
+  possible: status === 'uncertain' ? null : '可能希望先核实范围，再确定时间。',
+  alternatives: ['也可能只是按字面说明测试安排。'], uncertainty: '缺少后续确认内容。', question: '需要先确认哪些测试事项？',
+}] });
+
+test('interpretation requires consent, preserves quotes and other reports, and exports locally', async (t) => {
+  const { call, dataRoot, model, state } = await fixture(t);
+  const store = createRecordingStore(join(dataRoot, 'recordings'));
+  const meta = await store.save({ text: '本次会议确认接口的部署时间和联调安排，测试负责人需要准备相应的案例。'.repeat(12), report: 'Existing factual notes' });
+  const path = `${API}/recordings/${meta.id}/interpretation`;
+  const preview = await call(path);
+  assert.equal(preview.data.report, null);
   assert.equal(state.modelCalls, 0);
-  assert.equal(voice.store.get().checkJobs, 0);
-  cleanup();
+  const input = { sourceHash: preview.data.source.hash, topic: '', language: 'en' };
+  assert.equal((await call(path, 'POST', input)).status, 400);
+  assert.equal((await call(path, 'POST', { ...input, model: { provider: 'other', model: model.model } })).status, 409);
+  assert.equal(state.modelCalls, 0);
+  state.checkResult = () => interpretationFixture();
+  const generated = await call(path, 'POST', { ...input, model });
+  assert.equal(generated.status, 201);
+  const report = generated.data.report;
+  assert.equal(report.items[0].quote, preview.data.source.units[0].text);
+  assert.equal(report.language, 'en');
+  assert.match(state.lastModelSystem, /English/);
+  const exported = await call(path + '?format=txt&locale=en');
+  assert.equal(exported.status, 200);
+  assert.match(exported.data.toString(), /Possible meaning \(inference\)/);
+  assert.match(exported.data.toString(), /not verified intent or facts/);
+  assert.equal(exported.headers['cache-control'], 'private, no-store');
+  assert.equal(state.modelCalls, 1, 'reading or exporting a report does not call a model');
+  assert.equal((await call(`${API}/recordings?limit=10`)).data.recordings[0].interpretation, undefined);
+  assert.equal((await call(`${API}/recordings/${meta.id}`)).data.recording.interpretation, undefined);
+  assert.equal((await store.get(meta.id)).report, 'Existing factual notes');
+  assert.equal((await store.get(meta.id)).text, meta.text);
+  state.checkResult = () => '{"items": [{"unitIds": [9999]}]}';
+  assert.equal((await call(path, 'POST', { ...input, model, analysisId: report.id })).status, 502);
+  assert.equal((await call(path)).data.report.id, report.id);
+  state.checkResult = () => '{"items":[]}';
+  const empty = await call(path, 'POST', { ...input, model, analysisId: report.id });
+  assert.equal(empty.status, 201);
+  assert.deepEqual(empty.data.report.items, []);
+  await call(`${API}/recordings/${meta.id}`, 'PATCH', { correction: meta.text + '新增结论。' });
+  assert.equal((await call(path)).data.report.stale, true);
+  assert.equal((await call(path + '?format=txt')).status, 409);
+  assert.equal((await call(path, 'POST', { ...input, model, analysisId: empty.data.report.id })).status, 409);
+  await call(`${API}/recordings/${meta.id}`, 'DELETE');
+  assert.equal((await call(path)).status, 404);
+});
+
+test('interpretation rejects short, incomplete and oversized text before any model call', async (t) => {
+  const { call, dataRoot, model, state } = await fixture(t);
+  const store = createRecordingStore(join(dataRoot, 'recordings'));
+  for (const [text, code] of [['太短。', 'short'], ['字'.repeat(40_001), 'tooLong']]) {
+    const saved = await store.save({ text });
+    const result = await call(`${API}/recordings/${saved.id}/interpretation`, 'POST', { sourceHash: checkSource(saved).hash, model, topic: '', language: 'zh' });
+    assert.equal(result.status, 422);
+    assert.equal(result.data.error.code, code);
+  }
+  const { data: { recording } } = await call(`${API}/recordings/live`, 'POST', { language: 'en', mimeType: 'audio/webm' });
+  const pending = await call(`${API}/recordings/${recording.id}/interpretation`, 'POST', { model });
+  assert.equal(pending.data.error.code, 'pending');
+  assert.equal(state.modelCalls, 0);
+});
+
+test('interpretation cancellation and competing replacements preserve the last saved report', { timeout: 3000 }, async (t) => {
+  const { call, dataRoot, model, state } = await fixture(t);
+  const saved = await createRecordingStore(join(dataRoot, 'recordings')).save({ text: '会议安排与测试确认。'.repeat(30) });
+  const path = `${API}/recordings/${saved.id}/interpretation`;
+  const input = { sourceHash: checkSource(saved).hash, model, topic: '', language: 'zh' };
+  state.checkResult = () => interpretationFixture();
+  const first = (await call(path, 'POST', input)).data.report;
+  const gate = Promise.withResolvers();
+  state.waitModel = gate.promise;
+  t.after(gate.resolve);
+  const canceled = call(path, 'POST', { ...input, analysisId: first.id });
+  while (state.modelCalls !== 2) await new Promise((resolve) => setImmediate(resolve));
+  state.interpretationResponse.emit('close');
+  assert.equal(state.modelSignal.aborted, true);
+  gate.resolve();
+  assert.ok((await canceled).status >= 400);
+  assert.equal((await call(path)).data.report.id, first.id);
+  const concurrentGate = Promise.withResolvers();
+  state.waitModel = concurrentGate.promise;
+  t.after(concurrentGate.resolve);
+  const pendingReplacements = [1, 2].map(() => call(path, 'POST', { ...input, analysisId: first.id }));
+  while (state.modelCalls !== 4) await new Promise((resolve) => setImmediate(resolve));
+  concurrentGate.resolve();
+  const replacements = await Promise.all(pendingReplacements);
+  assert.deepEqual(replacements.map((result) => result.status).sort(), [201, 409]);
+  const current = (await call(path)).data.report;
+  const changedGate = Promise.withResolvers();
+  state.waitModel = changedGate.promise;
+  t.after(changedGate.resolve);
+  const changed = call(path, 'POST', { ...input, analysisId: current.id });
+  while (state.modelCalls !== 5) await new Promise((resolve) => setImmediate(resolve));
+  await call(`${API}/recordings/${saved.id}`, 'PATCH', { correction: saved.text + '修改的原话。' });
+  changedGate.resolve();
+  assert.equal((await changed).status, 409);
+  assert.equal((await call(path)).data.report.id, current.id);
 });
