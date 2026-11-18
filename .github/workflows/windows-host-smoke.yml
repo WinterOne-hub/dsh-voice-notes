@@ -45,4 +45,4 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Plugin tests failed' }
           npm pack --ignore-scripts
           if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
-          node scripts/meeting-host-smoke.mjs dsh-voice-notes-0.0.3.tgz $env:VOICE_NOTES_TEST_WAV
+          node scripts/meeting-host-smoke.mjs "dsh-voice-notes-$((Get-Content package.json | ConvertFrom-Json).version).tgz" $env:VOICE_NOTES_TEST_WAV

@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.3';
+    const BUILD = '0.0.4';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -983,6 +983,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       reportLanguage: REPORT_LANGUAGES.some(([code]) => code === prefs.reportLanguage) ? prefs.reportLanguage : 'auto',
       targetLanguage: savedTarget,
       sourceLanguage: savedSource,
+      captureSource: 'microphone',
       translate: savedTarget !== 'off',
       editMode: Boolean(savedModelPermission) && prefs.editMode === true,
       editedText: '',
@@ -1734,11 +1735,81 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       };
     }
 
+    function computerAudioMessage(code) {
+      const messages = {
+        missing: ['当前安装包缺少电脑声音组件，请安装完整版本。', 'Computer audio component is missing. Install the full package.'],
+        unsupported: ['电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。', 'Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.'],
+        unverified: ['电脑声音组件校验失败，请重新安装。', 'Computer audio integrity check failed. Reinstall the package.'],
+        deviceChanged: ['输出设备已变化，录音已停止。已采集的音频保留。', 'Output device changed. Recording stopped; captured audio is preserved.'],
+        limit: ['电脑声音录制已达到 60 分钟上限。', 'Computer audio reached its 60-minute limit.'],
+      };
+      const pair = messages[code] ?? ['电脑声音录制失败或被中断。请检查系统音频权限和输出设备。', 'Computer audio failed or was interrupted. Check system audio permission and output device.'];
+      return pair[document.documentElement.lang?.startsWith('en') ? 1 : 0];
+    }
+
+    async function openSystemAudio(language) {
+      const availability = await request('/system-audio', { method: 'GET' });
+      if (!availability.ready) throw new Error(computerAudioMessage(availability.code));
+      const response = await fetch(`${API}/system-audio`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirmed: true, language }), signal: engine.abort.signal,
+      });
+      const session = await readJsonResponse(response);
+      const controller = new AbortController();
+      const capture = {
+        system: true, recording: session.recording, closed: false,
+        audio: { sampleRate: SAMPLE_RATE }, stream: { getTracks: () => [] }, mimeType: 'audio/wav',
+        async stopNative() {
+          if (!capture.stopping) capture.stopping = request(`/system-audio/${session.id}`, { method: 'DELETE' });
+          const result = await capture.stopping;
+          if (result.code) { engine.run && (engine.run.interrupted = true); store.set({ captureWarning: computerAudioMessage(result.code) }); }
+          await capture.reading;
+        },
+        async close() {
+          controller.abort();
+          await capture.stopNative().catch(() => {});
+        },
+        start(generation) {
+          capture.reading = (async () => {
+            let failed = false;
+            try {
+              const response = await fetch(`${API}/system-audio/${session.id}/stream`, { signal: controller.signal });
+              if (!response.ok || !response.body) throw new Error('Audio stream unavailable');
+              const reader = response.body.getReader();
+              let remainder = new Uint8Array(0);
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const bytes = new Uint8Array(remainder.length + value.length);
+                bytes.set(remainder); bytes.set(value, remainder.length);
+                const count = Math.floor(bytes.length / 2), view = new DataView(bytes.buffer);
+                const samples = new Float32Array(count);
+                for (let i = 0; i < count; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+                remainder = bytes.slice(count * 2);
+                ingestSamples(samples, generation);
+              }
+              if (remainder.length) throw new Error('Incomplete audio sample');
+            } catch { failed = !controller.signal.aborted; }
+            finally {
+              if (generation === engine.generation && store.get().phase === 'recording') {
+                const status = await request(`/system-audio/${session.id}`, { method: 'GET' }).catch(() => ({ code: 'captureFailed' }));
+                if (failed || status.code) store.set({ captureWarning: computerAudioMessage(status.code) });
+                // Schedule after this reader settles; finish waits for it when flushing.
+                queueMicrotask(() => void finish(failed || status.code ? 'interrupted' : 'stop'));
+              }
+            }
+          })();
+        },
+      };
+      return capture;
+    }
+
     async function closeCapture() {
       const capture = engine.capture;
       engine.capture = null;
       if (!capture || capture.closed) return;
       capture.closed = true;
+      await capture.close?.();
       if (capture.recorder && capture.recorder.state !== 'inactive') {
         try {
           capture.recorder.onstop = null;
@@ -1816,6 +1887,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function flushPcm(capture) {
+      if (capture?.system) return capture.stopNative().catch((error) => {
+        if (engine.run) engine.run.interrupted = true;
+        store.set({ captureWarning: messageOf(error) });
+      });
       return new Promise((resolve) => {
         if (!capture?.worklet) {
           resolve();
@@ -2049,10 +2124,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return han > 0 && han >= latin * 0.4 ? 'zh' : 'en';
     }
 
-    async function createMeetingReport(source, model, preference) {
+    async function createMeetingReport(source, model, preference, kind = 'meeting') {
       const language = resolveReportLanguage(preference, source);
       const send = async (text, mode, compact) => {
-        const body = await request('/report', { json: { text, mode, compact, language, model } });
+        const body = await request('/report', { json: { text, mode, compact, language, model, kind } });
         return String(body.report ?? '').trim();
       };
       if (source.length <= 12_000) return send(source);
@@ -2073,7 +2148,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       if (!source) return;
       store.set({ reporting: true, reportError: '' });
       try {
-        const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage);
+        const report = await createMeetingReport(source, run?.model ?? null, store.get().reportLanguage, run?.source === 'system' ? 'learning' : 'meeting');
         await patchArchive(run, { report, meetingRevision });
         if (generation === engine.generation) store.set({ report, reporting: false });
       } catch (error) {
@@ -2146,31 +2221,39 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const captureOptions = store.get();
       const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
         ? captureOptions.meetingSpeakers : undefined;
+      const computerAudio = captureOptions.surface === 'studio' && captureOptions.captureSource === 'system';
+      if (computerAudio && !window.confirm(document.documentElement.lang?.startsWith('en')
+        ? 'Record computer playback audio (up to 60 minutes)? Other apps and notification sounds may be included. The microphone stays off. Audio is saved locally.'
+        : '开始录制电脑声音（最长 60 分钟）？可能包含其他应用和通知声音。麦克风关闭，音频保存在本机。')) {
+        store.set({ phase: 'idle' }); return;
+      }
       const archive = captureOptions.surface === 'studio' || captureOptions.dictationHistory;
       const model = store.get().status?.model ?? null;
       store.set({ phase: 'requesting', providerId: provider.id, error: '' });
       let capture;
       try {
-        capture = await openMicrophone(archive);
+        capture = computerAudio ? await openSystemAudio(language) : await openMicrophone(archive);
       } catch (error) {
         if (generation !== engine.generation) return;
-        store.set({ phase: 'error', error: micError(error) });
+        store.set({ phase: 'error', error: computerAudio ? messageOf(error) : micError(error) });
         return;
       }
       if (generation !== engine.generation) {
+        await capture.close?.();
         for (const node of [capture.worklet, capture.processor, capture.source, capture.mute]) node?.disconnect();
         for (const track of capture.stream.getTracks()) track.stop();
         return;
       }
       engine.capture = capture;
       try {
-        const recording = archive
+        const recording = capture.recording ?? (archive
           ? (await request('/recordings/live', {
               json: { mimeType: capture.mimeType, language, providerId: provider.id },
-            })).recording : null;
+            })).recording : null);
         if (generation !== engine.generation) return;
         const run = {
           id: recording?.id ?? null,
+          source: computerAudio ? 'system' : 'microphone',
           meetingSpeakers,
           localTexts: new Map(),
           language,
@@ -2223,9 +2306,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           ...current,
           phase: 'recording', elapsed: 0, level: 0,
           archiveStage: archive ? '' : 'draft',
-          captureWarning: archive && !capture.recorder ? translate('archive.noRecorder') : '',
+          captureWarning: archive && !capture.recorder && !capture.system ? translate('archive.noRecorder') : '',
           historyVersion: current.historyVersion + Number(archive),
         }));
+        capture.start?.(generation);
         startTicker(generation, run);
       } catch (error) {
         await closeCapture();
@@ -3865,7 +3949,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           const model = (await fetchStatus()).model;
           if (!modelKey(model)) throw new Error(t('model.unavailable'));
           if (!window.confirm(t('report.send', { model: `${model.provider} / ${model.model}` }))) return;
-          const report = await createMeetingReport(transcript, model, reportLanguage);
+          const report = await createMeetingReport(transcript, model, reportLanguage, recording.source === 'system' ? 'learning' : 'meeting');
           const { recording: updated } = await request(path, {
             method: 'PATCH', json: { report, meetingRevision: recording.meeting?.revision },
           });
@@ -4878,6 +4962,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               ),
             ),
             h('div', { className: 'vls-options-row' },
+              h('label', { className: 'vls-lang' },
+                document.documentElement.lang?.startsWith('en') ? 'Audio source' : '声音来源',
+                h('select', { className: 'vl-select', value: state.captureSource,
+                  disabled: recording || requesting || finishing || state.importing,
+                  onChange: (event) => store.set({ captureSource: event.target.value }) },
+                  h('option', { value: 'microphone' }, document.documentElement.lang?.startsWith('en') ? 'Microphone' : '麦克风'),
+                  h('option', { value: 'system' }, document.documentElement.lang?.startsWith('en') ? 'Computer audio' : '电脑声音'))),
+              state.captureSource === 'system' ? h('span', { className: 'vl-note' },
+                document.documentElement.lang?.startsWith('en') ? 'Microphone off · 60 min maximum · reports use Learning Notes' : '麦克风关闭 · 最长 60 分钟 · 报告采用学习笔记格式') : null,
               h('label', { className: 'vls-lang' },
                 h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ meetingMode: event.target.checked }) }),

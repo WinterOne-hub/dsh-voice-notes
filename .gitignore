@@ -17,3 +17,5 @@ recordings/
 *.m4a
 *.onnx
 !meeting-models/segmentation.onnx
+
+native/bin/
