@@ -302,7 +302,7 @@ function isLoopback(address) {
 
 /** Public recording shape with the two same-origin media URLs. */
 function publicRecording(meta, summary = false, query = '') {
-  const { chunkCount, lastCaptureAt, customTitle, segments, correction, meeting, check, interpretation, ...recording } = meta;
+  const { systemPcm, chunkCount, lastCaptureAt, customTitle, segments, correction, meeting, check, interpretation, ...recording } = meta;
   const pcmSeconds = Number(meta.diagnostics?.pcmSamples) > 0
     ? Number(meta.diagnostics.pcmSamples) / 16_000
     : 0;
@@ -313,6 +313,7 @@ function publicRecording(meta, summary = false, query = '') {
   const audio = meta.audioFile || (segments && meta.size > 0);
   return {
     ...recording,
+    size: recording.size + (systemPcm && recording.size ? 44 : 0),
     duration: Math.round(duration * 10) / 10,
     status: recordingStatus(meta),
     hasCorrections: correctedText !== undefined,

@@ -68,6 +68,7 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
   });
   const url = (path) => new URL('/api/voice-live' + path, start);
   assert.equal((await fetch(url('/meeting-models'))).status, 401);
+  assert.equal((await fetch(url('/system-audio'))).status, 401);
   const response = await fetch(start, { redirect: 'manual' });
   const cookie = response.headers.getSetCookie().map((item) => item.split(';')[0]).join('; ');
   assert.ok(cookie);
@@ -83,6 +84,10 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
   });
   const bytes = (path, method, body) => ({ method, headers: { 'content-type': 'application/octet-stream' }, body });
 
+  const computerAudio = await send('/system-audio', 'GET');
+  assert.equal(computerAudio.ready, true, 'Installed native audio component must pass integrity checks without capture');
+  assert.equal(computerAudio.active, false);
+  assert.equal((await raw('/system-audio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmed: false, language: 'en' }) })).status, 400);
   const models = await send('/meeting-models', 'GET');
   assert.equal(models.supported, true, 'The Host ships the correct native runtime');
   assert.equal(models.ready, false);

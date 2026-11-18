@@ -106,6 +106,20 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "system.requesting": "正在请求系统音频权限…",
+      "system.source": "声音来源",
+      "system.microphone": "麦克风",
+      "system.computer": "电脑声音",
+      "system.hint": "麦克风关闭 · 最长 60 分钟 · 报告采用学习笔记格式",
+      "system.confirm": "开始录制电脑声音（最长 60 分钟）？可能包含其他应用和通知声音。麦克风关闭，音频保存在本机。",
+      "system.report": "学习笔记",
+      "system.missing": "当前安装包缺少电脑声音组件，请安装完整版本。",
+      "system.unsupported": "电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。",
+      "system.unverified": "电脑声音组件校验失败，请重新安装。",
+      "system.deviceChanged": "输出设备已变化，录音已停止。已采集的音频保留。",
+      "system.limit": "电脑声音录制已达到 60 分钟上限。",
+      "system.failed": "电脑声音录制失败或被中断。请检查系统音频权限和输出设备。",
+
       'interpret.title': '表达解读（潜台词）',
       'interpret.topicHint': '可填写会议背景，帮助理解上下文',
       'interpret.notice': '实验功能。以下为可能解释，不代表真实意图或事实；请结合上下文核对，必要时直接向对方确认。',
@@ -423,6 +437,20 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "system.requesting": "Requesting system audio permission…",
+      "system.source": "Audio source",
+      "system.microphone": "Microphone",
+      "system.computer": "Computer audio",
+      "system.hint": "Microphone off · 60 min maximum · Learning Notes reports",
+      "system.confirm": "Record computer playback audio (up to 60 minutes)? Other apps and notification sounds may be included. The microphone stays off. Audio is saved locally.",
+      "system.report": "Learning Notes",
+      "system.missing": "Computer audio component is missing. Install the full package.",
+      "system.unsupported": "Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.",
+      "system.unverified": "Computer audio integrity check failed. Reinstall the package.",
+      "system.deviceChanged": "Output device changed. Recording stopped; captured audio is preserved.",
+      "system.limit": "Computer audio reached its 60-minute limit.",
+      "system.failed": "Computer audio failed or was interrupted. Check system audio permission and output device.",
+
       'interpret.title': 'Expression interpretation (subtext)',
       'interpret.topicHint': 'Optional meeting background for context',
       'interpret.notice': 'Experimental. These are possible readings, not verified intent or facts. Check the context and ask the speaker when clarification is needed.',
@@ -1736,15 +1764,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function computerAudioMessage(code) {
-      const messages = {
-        missing: ['当前安装包缺少电脑声音组件，请安装完整版本。', 'Computer audio component is missing. Install the full package.'],
-        unsupported: ['电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。', 'Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.'],
-        unverified: ['电脑声音组件校验失败，请重新安装。', 'Computer audio integrity check failed. Reinstall the package.'],
-        deviceChanged: ['输出设备已变化，录音已停止。已采集的音频保留。', 'Output device changed. Recording stopped; captured audio is preserved.'],
-        limit: ['电脑声音录制已达到 60 分钟上限。', 'Computer audio reached its 60-minute limit.'],
-      };
-      const pair = messages[code] ?? ['电脑声音录制失败或被中断。请检查系统音频权限和输出设备。', 'Computer audio failed or was interrupted. Check system audio permission and output device.'];
-      return pair[document.documentElement.lang?.startsWith('en') ? 1 : 0];
+      return translate(`system.${['missing', 'unsupported', 'unverified', 'deviceChanged', 'limit'].includes(code) ? code : 'failed'}`);
     }
 
     async function openSystemAudio(language) {
@@ -2222,9 +2242,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
         ? captureOptions.meetingSpeakers : undefined;
       const computerAudio = captureOptions.surface === 'studio' && captureOptions.captureSource === 'system';
-      if (computerAudio && !window.confirm(document.documentElement.lang?.startsWith('en')
-        ? 'Record computer playback audio (up to 60 minutes)? Other apps and notification sounds may be included. The microphone stays off. Audio is saved locally.'
-        : '开始录制电脑声音（最长 60 分钟）？可能包含其他应用和通知声音。麦克风关闭，音频保存在本机。')) {
+      if (computerAudio && !window.confirm(translate('system.confirm'))) {
         store.set({ phase: 'idle' }); return;
       }
       const archive = captureOptions.surface === 'studio' || captureOptions.dictationHistory;
@@ -4586,7 +4604,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const statusText = recording
         ? t('phase.recording')
         : requesting
-          ? t('phase.requesting')
+          ? t(state.captureSource === 'system' ? 'system.requesting' : 'phase.requesting')
           : finishing
             ? stopFeedback(state, t)
             : phase === 'setup'
@@ -4963,14 +4981,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             ),
             h('div', { className: 'vls-options-row' },
               h('label', { className: 'vls-lang' },
-                document.documentElement.lang?.startsWith('en') ? 'Audio source' : '声音来源',
+                t('system.source'),
                 h('select', { className: 'vl-select', value: state.captureSource,
                   disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ captureSource: event.target.value }) },
-                  h('option', { value: 'microphone' }, document.documentElement.lang?.startsWith('en') ? 'Microphone' : '麦克风'),
-                  h('option', { value: 'system' }, document.documentElement.lang?.startsWith('en') ? 'Computer audio' : '电脑声音'))),
+                  h('option', { value: 'microphone' }, t('system.microphone')),
+                  h('option', { value: 'system' }, t('system.computer')))),
               state.captureSource === 'system' ? h('span', { className: 'vl-note' },
-                document.documentElement.lang?.startsWith('en') ? 'Microphone off · 60 min maximum · reports use Learning Notes' : '麦克风关闭 · 最长 60 分钟 · 报告采用学习笔记格式') : null,
+                t('system.hint')) : null,
               h('label', { className: 'vls-lang' },
                 h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ meetingMode: event.target.checked }) }),
@@ -5008,7 +5026,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button', className: 'vl-toggle', 'aria-pressed': state.reportMode,
                   disabled: !state.reportMode && !activeModel(state),
                   title: t('studio.reportHint'), onClick: () => setReportMode(!state.reportMode),
-                }, h(Icon, { name: 'file', size: 14 }), t('studio.report')),
+                }, h(Icon, { name: 'file', size: 14 }), state.captureSource === 'system' ? t('system.report') : t('studio.report')),
                 h(ReportLanguageSelect, {
                   t, value: state.reportLanguage, disabled: state.reporting,
                   setValue: (reportLanguage) => {

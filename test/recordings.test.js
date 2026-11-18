@@ -232,16 +232,18 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   const body = new Element();
   const sandbox = {
     AbortController, AbortSignal, Blob, DataView, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
-    setInterval, clearInterval, setTimeout, clearTimeout,
+    setInterval, clearInterval, setTimeout, clearTimeout, queueMicrotask,
     document: { body, createElement: () => new Element() },
-    navigator: { mediaDevices: { getUserMedia: async () => stream } },
+    navigator: { mediaDevices: { getUserMedia: async () => { if (runtime.forbidMicrophone) throw new Error('Microphone must remain off'); return stream; } } },
     window: {
       AudioContext,
       confirm: runtime.confirm,
       localStorage: { getItem: () => JSON.stringify({ sourceLanguage: 'en', ...preferences }) },
       __ModuleLoader__: { load: ({ factory }) => factory(() => runtime.React ?? {}) },
     },
-    async fetch(path, options) {
+    async fetch(path, options = {}) {
+      const custom = await runtime.fetch?.(path, options);
+      if (custom) return custom;
       const body = typeof options.body === 'string' ? JSON.parse(options.body)
         : options.body instanceof Blob ? Buffer.from(await options.body.arrayBuffer())
         : options.body ? Buffer.from(options.body) : undefined;
@@ -395,6 +397,10 @@ test('every voice endpoint requires the signed desktop browser session and rejec
   await call(`${path}/chunks/0?duration=1`, 'PUT', Buffer.from('fixture audio'));
   const targets = [
     ['/status', 'GET'],
+    ['/system-audio', 'GET'],
+    ['/system-audio', 'POST', { confirmed: true, language: 'en' }],
+    ['/system-audio/00000000-0000-0000-0000-000000000000', 'DELETE'],
+    ['/system-audio/00000000-0000-0000-0000-000000000000/stream', 'GET'],
     ['/open-state', 'GET'],
     ['/open', 'POST'],
     ['/update', 'GET'],
@@ -982,4 +988,57 @@ test('interpretation cancellation and competing replacements preserve the last s
   changedGate.resolve();
   assert.equal((await changed).status, 409);
   assert.equal((await call(path)).data.report.id, current.id);
+});
+
+test('computer audio streams odd byte boundaries without opening a microphone, and saves local transcription', { timeout: 4000 }, async (t) => {
+  const { call, dataRoot, state } = await fixture(t);
+  const archive = createRecordingStore(join(dataRoot, 'recordings'));
+  const pcm = Buffer.alloc(32000);
+  for (let i = 0; i < pcm.length; i += 2) pcm.writeInt16LE(4096, i);
+  let controller, id, confirmations = 0;
+  const json = (data) => ({ ok: true, status: 200, json: async () => ({ ok: true, ...data }) });
+  const { store, begin, finish, engine } = await bootClient(t, call, {}, {
+    forbidMicrophone: true,
+    confirm: () => { confirmations++; return true; },
+    async fetch(path, options) {
+      if (!path.startsWith(`${API}/system-audio`)) return;
+      if (path.endsWith('/system-audio') && options.method === 'GET') return json({ ready: true });
+      if (options.method === 'POST') {
+        assert.equal(JSON.parse(options.body).confirmed, true);
+        const recording = await archive.save({ live: true, source: 'system', systemPcm: true, mimeType: 'audio/wav', language: 'en' });
+        id = recording.id; await archive.appendChunk(id, 0, pcm, 1);
+        return json({ id: 'test-capture', recording, sampleRate: 16000 });
+      }
+      if (path.endsWith('/stream')) return { ok: true, body: new ReadableStream({
+        start(value) { controller = value; value.enqueue(pcm.subarray(0, 3)); value.enqueue(pcm.subarray(3)); },
+      }) };
+      if (options.method === 'DELETE') { controller.close(); return json({ active: false, code: null }); }
+      return json({ active: false, code: null });
+    },
+  });
+  assert.equal(store.get().captureSource, 'microphone');
+  store.set({ captureSource: 'system' });
+  await begin(null, null, false, 'studio');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(engine.pcmSamples, 16000); assert.equal(engine.capture.recorder, undefined);
+  await finish('stop');
+  assert.equal(confirmations, 1); assert.equal(store.get().captureWarning, '');
+  assert.equal(store.get().phase, 'result');
+  const recording = await archive.get(id);
+  assert.equal(recording.status, 'complete'); assert.equal(recording.text, 'Raw model output');
+  assert.equal(state.modelCalls, 0);
+});
+
+test('learning notes honor language and require selected-model confirmation for both partial and merged reports', async (t) => {
+  const { call, model, state } = await fixture(t);
+  assert.equal((await call(`${API}/report`, 'POST', { kind: 'learning', text: 'Quote', language: 'en' })).status, 400);
+  assert.equal(state.modelCalls, 0);
+  for (const mode of ['part', 'merge']) {
+    assert.equal((await call(`${API}/report`, 'POST', { kind: 'learning', text: 'Source only', language: 'en', model, mode })).status, 200);
+    assert.match(state.lastModelInput, /learning notes in English/);
+    assert.match(state.lastModelInput, /Review Questions/);
+    assert.match(state.lastModelInput, /Only use supplied facts/);
+  }
+  assert.equal((await call(`${API}/system-audio`, 'POST', { confirmed: false, language: 'en' })).status, 400);
+  assert.equal((await call(`${API}/system-audio/not-a-session`, 'DELETE')).status, 404);
 });

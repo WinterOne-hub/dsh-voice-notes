@@ -2,7 +2,7 @@
   "name": "dsh-voice-notes",
   "version": "0.0.4",
   "type": "module",
-  "description": "DeepSeek Harness 本地录音转写、说话人区分和会议纪要 / Local transcription, speaker diarization and meeting notes for DeepSeek Harness Desktop.",
+  "description": "DeepSeek Harness 本地录音转写、电脑声音录制、学习笔记和会议分析 / Local transcription, computer audio, learning notes and meeting analysis for DeepSeek Harness.",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",

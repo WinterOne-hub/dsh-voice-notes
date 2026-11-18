@@ -2,6 +2,8 @@
 
 DeepSeek Harness 桌面插件，支持本地录音转写、说话人区分、会议纪要和转写检索。适用于 macOS（Apple Silicon）和 Windows x64。
 
+**v0.0.4 预览：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.4)。包含电脑声音录制、会议体检表盘和表达解读（潜台词）；下面保留 v0.0.3 正式版入口。
+
 [中文](#安装和开发) · [English](#english) · [Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
 
 ## 安装和开发
@@ -74,6 +76,8 @@ v0.0.4 的另一项实验功能。在历史卡片打开「表达解读（潜台�
 不强制推测潜台词：没有需要解读的表达时返回空报告，上下文不足时标为「无法判断」。重叠发言或归属不明的片段会由程序设为「无法判断」；说话人归属修改后需要重新生成。推测不代表真实意图或事实，模型指令排除心理、人格评价和置信度分数。输入范围与会议体检相同。每条录音分别保存最新的体检和表达解读，互不覆盖；失败或取消保留旧结果，转写变更后旧报告失效。导出包含原话及相邻上下文，请按录音资料管理。真实会议解读质量尚未验证。
 
 ## English
+
+[Download v0.0.4 preview and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.4). v0.0.3 stable download links remain below.
 
 ### Computer audio (v0.0.4 preview)
 

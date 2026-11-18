@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { release } from 'node:os';
 import pkg from './package.json' with { type: 'json' };
 import { PCM_BYTES_PER_SECOND, SYSTEM_AUDIO_SECONDS } from './pcm.js';
 
@@ -18,8 +19,11 @@ const bundles = {
 
 export async function verifiedHelper(platform = process.platform, arch = process.arch, directory = root) {
   const key = `${platform}-${arch}`, files = bundles[key];
+  if (platform === 'darwin' && process.platform === 'darwin' && Number(release().split('.').slice(0, 2).join('.')) < 23.2) throw new SystemAudioError('unsupported', 503);
   if (!files) throw new SystemAudioError('unsupported', 503);
   try {
+    const base = await lstat(directory);
+    if (base.isSymbolicLink() || !base.isDirectory()) throw new Error('Unsafe native root');
     const paths = [...files, `${key}.json`];
     for (const path of paths) {
       const components = path.split('/');
@@ -64,7 +68,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
     if (session.stopping) return;
     session.stopping = true;
     session.child.stdin.end('stop\n');
-    session.killTimer = setTimeout(() => session.child.kill(), 2000);
+    session.killTimer = setTimeout(() => session.child.kill('SIGKILL'), 2000);
     session.killTimer.unref?.();
   };
   async function deliver(session, chunk) {
@@ -159,7 +163,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
           session.active = false;
           rejectReady(new SystemAudioError(session.code ?? 'noSamples', 503));
           if (session.response && !session.response.destroyed) session.response.end();
-          if (!session.bytes || session.code) await recordings.update(recording.id, { status: 'interrupted' }).catch(() => {});
+          if (!session.bytes || session.code === 'disconnected' || (session.code && !session.attached)) await recordings.update(recording.id, { status: 'interrupted' }).catch(() => {});
         }
       })();
       await ready;
