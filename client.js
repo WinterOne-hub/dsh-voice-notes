@@ -1429,7 +1429,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]);
         const status = await fetch(`${API}/meeting-models`, { signal, cache: 'no-store' }).then(readJsonResponse);
-        if (file.size !== status.bytes) {
+        if (!(status.acceptedBytes ?? [status.bytes]).includes(file.size)) {
           setStatus('integrity', true);
           return;
         }

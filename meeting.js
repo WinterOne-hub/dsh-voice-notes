@@ -22,6 +22,9 @@ const ASSETS = [
   {
     file: 'embedding.onnx', bytes: 39593761,
     sha256: '1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b',
+    // The current upstream asset has one extra byte. Verify the full
+    // download and the original model before storing the original bytes.
+    upstream: { bytes: 39593762, sha256: 'f1ee61be04000b50392a63442e5dd9feaea7e81dddd494d3647cf1c3d88a1498' },
     url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
   },
 ];
@@ -60,17 +63,23 @@ async function persistModel(path, input, asset, signal, status) {
   const partial = `${path}.${randomUUID()}.part`;
   try {
     const hash = createHash('sha256');
+    const upstreamHash = asset.upstream ? createHash('sha256') : undefined;
     let bytes = 0;
     const check = new Transform({
       transform(chunk, _encoding, done) {
+        const remaining = Math.max(0, asset.bytes - bytes);
         bytes += chunk.length;
-        if (bytes > asset.bytes) return done(new MeetingError('integrity', status));
-        hash.update(chunk);
-        done(null, chunk);
+        if (bytes > (asset.upstream?.bytes ?? asset.bytes)) return done(new MeetingError('integrity', status));
+        upstreamHash?.update(chunk);
+        const model = chunk.subarray(0, remaining);
+        hash.update(model);
+        done(null, model);
       },
     });
     await pipeline(input, check, createWriteStream(partial, { flags: 'wx', mode: 0o600 }), { signal });
-    if (bytes !== asset.bytes || hash.digest('hex') !== asset.sha256) throw new MeetingError('integrity', status);
+    const knownSize = bytes === asset.bytes ||
+      (bytes === asset.upstream?.bytes && upstreamHash.digest('hex') === asset.upstream.sha256);
+    if (!knownSize || hash.digest('hex') !== asset.sha256) throw new MeetingError('integrity', status);
     await rename(partial, path);
   } finally {
     await rm(partial, { force: true });
@@ -164,7 +173,8 @@ export function createMeetingEngine(dataRoot) {
       const available = await supported();
       const ready = available && await Promise.all(models.map((path, i) => matches(path, ASSETS[i], AbortSignal.timeout(15_000))))
         .then((results) => results.every(Boolean)).catch(() => false);
-      return { supported: available, ready, bytes: ASSETS.reduce((sum, asset) => sum + (asset.bundled ? 0 : asset.bytes), 0) };
+      const external = ASSETS[1];
+      return { supported: available, ready, bytes: external.bytes, acceptedBytes: [external.bytes, external.upstream.bytes] };
     },
     async prepare(signal) {
       if (!await supported()) throw new MeetingError('unsupported', 503);
@@ -179,7 +189,7 @@ export function createMeetingEngine(dataRoot) {
     async install(input, length, signal) {
       if (!await supported()) throw new MeetingError('unsupported', 503);
       const asset = ASSETS[1];
-      if (length !== undefined && Number(length) !== asset.bytes) throw new MeetingError('integrity', 422);
+      if (length !== undefined && ![asset.bytes, asset.upstream.bytes].includes(Number(length))) throw new MeetingError('integrity', 422);
       await secureCache(true);
       await persistModel(models[1], input, asset, signal, 422);
     },
