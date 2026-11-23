@@ -2,23 +2,23 @@
 
 DeepSeek Harness 桌面插件，支持本地录音转写、说话人区分、会议纪要和转写检索。适用于 macOS（Apple Silicon）和 Windows x64。
 
-**v0.0.4：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.4)。包含电脑声音录制、会议体检表盘和表达解读（潜台词）。电脑声音及两项会议分析为实验功能。
+**v0.0.5：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.5)。包含电脑声音录制、会议体检表盘和表达解读（潜台词）。电脑声音及两项会议分析为实验功能。
 
 [中文](#安装和开发) · [English](#english) · [Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
 
 ## 安装和开发
 
-| 平台 | v0.0.4 安装包 | SHA-256 |
+| 平台 | v0.0.5 安装包 | SHA-256 |
 | --- | --- | --- |
-| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/dsh-voice-notes-0.0.4.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/SHA256SUMS) |
-| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/dsh-voice-notes-0.0.4.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/SHA256SUMS) |
+| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/SHA256SUMS) |
+| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/SHA256SUMS) |
 
-1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.4.tgz -Algorithm SHA256`，与校验文件比对。
+1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.5.tgz -Algorithm SHA256`，与校验文件比对。
 2. macOS 和 Windows 使用同一个安装包。在 Harness 的「插件」页添加 `.tgz`，启用后重启。在侧栏打开「语音速记」。若已安装其他语音速记本地包，先卸载旧包。
 
 macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、四人会议转写和历史回放，实体麦克风尚未验证。参见 [Windows 测试记录](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml)。
 
-打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.4。
+打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.5。
 
 ## 使用
 
@@ -43,7 +43,7 @@ v0.0.3 新增。
 
 ## 电脑声音（实验）
 
-在工作台将「声音来源」设为「电脑声音」，点击录制并确认。直接采集输出音频，使用耳机也可录制；不启用麦克风，不采集屏幕画面。字幕、历史回放、校对、检索、分享及两项趣味分析使用相同流程。选择生成报告后，电脑声音采用学习笔记格式：概览、提纲、概念、示例和复习问题。报告语言仍可选择。
+在工作台将「声音来源」设为「电脑声音」，点击录制并确认。直接采集输出音频，使用耳机也可录制；不启用麦克风，不采集屏幕画面。字幕、历史回放、校对、检索、分享及两项趣味分析使用相同流程。可在报告中选择「学习笔记」或「会议纪要」并设置语言。默认使用学习笔记。
 
 - macOS Apple Silicon：需要 macOS 14.2+，首次开始时需允许系统音频录制。使用 [Core Audio tap](https://developer.apple.com/documentation/coreaudio/capturing-system-audio-with-core-audio-taps)。
 - Windows x64：使用默认播放设备的 [WASAPI 回环](https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording)，无需虚拟声卡。
@@ -77,13 +77,13 @@ v0.0.4 的另一项实验功能。在历史卡片打开「表达解读（潜台�
 
 ## English
 
-[Download v0.0.4 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.4). Computer audio and the two meeting analysis tools are experimental.
+[Download v0.0.5 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.5). Computer audio and the two meeting analysis tools are experimental.
 
 ### Computer audio (experimental)
 
 Select **Computer audio** in the studio and confirm before recording. Captures playback directly, including when using headphones; microphone and screen capture stay off. Requires macOS 14.2+ on Apple Silicon (Core Audio tap, system audio permission) or Windows x64 (default playback device, WASAPI loopback). Both fun analysis tools are included in this version.
 
-The system mix may include other apps and notifications. No per-app selection or microphone mixing yet. Recordings are local mono WAV files, limited to 60 minutes (about 1.9 MB/minute). Changing the output device stops capture and preserves recorded audio. Timestamps describe the recording timeline. Optional reports use Learning Notes: overview, outline, concepts, examples and review questions, in the selected report language. Text is sent only through the existing model consent flow.
+The system mix may include other apps and notifications. No per-app selection or microphone mixing yet. Recordings are local mono WAV files, limited to 60 minutes (about 1.9 MB/minute). Changing the output device stops capture and preserves recorded audio. Timestamps describe the recording timeline. Choose Meeting Notes or Learning Notes and select an output language. Computer audio defaults to Learning Notes. Text is sent only through the existing model consent flow.
 
 Experimental feature: synthetic-audio tests do not verify real-device permissions, headphone capture or player compatibility. The macOS helper is ad-hoc signed and not notarized; the Windows helper has no publisher certificate. Do not disable system protections. Open sources are under `native/`; run `npm run build:native` on each target platform and include both platform bundles with SHA-256 manifests before packaging. Helpers exchange PCM/status through standard streams, with no network access or model credentials. Hash verification does not establish publisher identity.
 
@@ -92,11 +92,11 @@ Voice Notes provides local audio transcription, speaker diarization, meeting sum
 
 ### Install
 
-Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/dsh-voice-notes-0.0.4.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.4/dsh-voice-notes-0.0.4.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
+Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
 
 Tested with Harness Desktop 0.2.2-rc.3 on macOS. Installation, four-speaker transcription, and archive playback were verified on the official Windows x64 build. Physical microphone capture on Windows has yet to be tested. See the [Windows test run](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml).
 
-The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.4.
+The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.5.
 
 ### Use
 

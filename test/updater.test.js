@@ -41,7 +41,7 @@ test('the updater checks once, verifies the bytes, and hands the private package
       requests.push(String(url));
       assert.equal(options.credentials, 'omit');
       assert.equal(options.redirect, 'manual');
-      if (requests.length === 1) {
+      if (url === 'https://api.github.com/repos/WinterOne-hub/dsh-voice-notes/releases/latest') {
         assert.equal(url, 'https://api.github.com/repos/WinterOne-hub/dsh-voice-notes/releases/latest');
         return Response.json(release);
       }
@@ -58,7 +58,7 @@ test('the updater checks once, verifies the bytes, and hands the private package
   assert.deepEqual(await updater.status(), { current: installedVersion, state: 'restart', version: nextVersion });
   await updater.install(nextVersion);
   assert.equal(installs, 1);
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 4);
 });
 
 test('the updater blocks outdated, unverified or out-of-scope downloads before installation', async () => {
@@ -101,4 +101,20 @@ test('release build tags preserve the package version and constrain the matching
   }
   await assert.rejects(withTag(tagged, [asset]).status(), { code: 'unverified' });
   await assert.rejects(withTag(`v${nextVersion}-rc.1`, []).status(), { code: 'checkFailed' });
+});
+
+test('a manual check makes a fresh request immediately after a failed check', async () => {
+  let checks = 0;
+  const updater = createUpdater({
+    getManager: () => null,
+    fetcher: async () => {
+      if (checks++ === 0) throw new Error('Offline');
+      return Response.json(release);
+    },
+  });
+  await assert.rejects(updater.status(), { code: 'checkFailed' });
+  await assert.rejects(updater.status(), { code: 'checkFailed' });
+  assert.equal(checks, 1);
+  assert.equal((await updater.status(true)).state, 'available');
+  assert.equal(checks, 2);
 });

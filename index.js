@@ -20,7 +20,7 @@ import { homedir } from 'node:os';
 import { CheckError, checkSource, checkView, checkBatches, parseLabels, newCheck } from './meeting-check.js';
 import { interpretationSource, parseInterpretation, newInterpretation, interpretationView, interpretationText } from './meeting-interpretation.js';
 import { join, resolve } from 'node:path';
-import { createRecordingStore, correctedTranscript, extensionFor, normalizeMime, recordingStatus, StorageError } from './storage.js';
+import { createRecordingStore, correctedTranscript, extensionFor, normalizeMime, recordingStatus, reportPending, reportSource, StorageError } from './storage.js';
 import { createUpdater, UpdateError } from './updater.js';
 import { createMeetingEngine, formatMeeting, MeetingError, MEETING_SECONDS, MAX_SPEAKERS, PCM_RATE, planTurns } from './meeting.js';
 
@@ -302,7 +302,7 @@ function isLoopback(address) {
 
 /** Public recording shape with the two same-origin media URLs. */
 function publicRecording(meta, summary = false, query = '') {
-  const { systemPcm, chunkCount, lastCaptureAt, customTitle, segments, correction, meeting, check, interpretation, ...recording } = meta;
+  const { systemPcm, reportSource: savedReportSource, chunkCount, lastCaptureAt, customTitle, segments, correction, meeting, check, interpretation, ...recording } = meta;
   const pcmSeconds = Number(meta.diagnostics?.pcmSamples) > 0
     ? Number(meta.diagnostics.pcmSamples) / 16_000
     : 0;
@@ -310,6 +310,7 @@ function publicRecording(meta, summary = false, query = '') {
   const rawText = String(recording.text ?? '');
   const correctedText = correctedTranscript(meta);
   const term = query.trim().toLowerCase();
+  const currentReportSource = summary ? undefined : reportSource(meta);
   const audio = meta.audioFile || (segments && meta.size > 0);
   return {
     ...recording,
@@ -319,6 +320,11 @@ function publicRecording(meta, summary = false, query = '') {
     hasCorrections: correctedText !== undefined,
     hasTranscript: Boolean((correctedText ?? rawText).trim()),
     hasReport: Boolean(meta.report),
+    ...(!summary ? {
+      reportSource: currentReportSource,
+      reportPending: reportPending(meta),
+      reportStale: Boolean(meta.reportStale || (meta.report && savedReportSource && savedReportSource !== currentReportSource)),
+    } : {}),
     hasCheck: Boolean(check),
     hasInterpretation: Boolean(interpretation),
     ...(!summary && check ? { check: checkView(meta) } : {}),
@@ -742,6 +748,7 @@ export async function apply(ctx, config) {
         providerId: String(body.providerId ?? '').slice(0, 200),
         title: typeof body.title === 'string' ? body.title.slice(0, 120) : '',
         source: body.source,
+        reportKind: body.reportKind,
       });
       writeJson(res, 201, { ok: true, recording: publicRecording(meta) }, method);
       return;
@@ -1006,6 +1013,8 @@ export async function apply(ctx, config) {
           status: body.status,
           duration: Number.isFinite(body.duration) ? body.duration : undefined,
           report: typeof body.report === 'string' ? body.report : undefined,
+          reportSource: typeof body.reportSource === 'string' ? body.reportSource : undefined,
+          reportKind: body.reportKind,
           meetingRevision: Number.isSafeInteger(body.meetingRevision) ? body.meetingRevision : undefined,
         });
         writeJson(res, 200, { ok: true, recording: publicRecording(meta) }, method);

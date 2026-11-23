@@ -118,3 +118,19 @@ test('the built platform helper emits only synthetic PCM in self-test mode', asy
   assert.equal(out.bytes().length, 96000);
   assert.equal(capture.snapshot(session.id).code, null);
 });
+
+test('stalled capture stops and preserves audio even before the first full chunk', { timeout: 12_000 }, async (t) => {
+  const { recordings } = await fixture(t);
+  const script = 'process.stdout.write(Buffer.alloc(640)); process.stdin.resume(); process.stdin.once("end", () => process.exit(0));';
+  const capture = createSystemAudio({ recordings, getHelper: async () => process.execPath, args: ['-e', script] });
+  t.after(() => capture.dispose());
+  const session = await capture.start({ confirmed: true });
+  const out = response();
+  const finished = once(out.stream, 'finish');
+  capture.stream(session.id, out.stream);
+  await finished;
+  assert.equal(capture.snapshot(session.id).code, 'noSamples');
+  assert.equal(capture.snapshot(session.id).active, false);
+  assert.equal(out.bytes().length, 640);
+  assert.equal((await recordings.get(session.recordingId)).size, 640);
+});
