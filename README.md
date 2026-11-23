@@ -2,23 +2,23 @@
 
 DeepSeek Harness 桌面插件，支持本地录音转写、说话人区分、会议纪要和转写检索。适用于 macOS（Apple Silicon）和 Windows x64。
 
-**v0.0.5：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.5)。包含电脑声音录制、会议体检表盘和表达解读（潜台词）。电脑声音及两项会议分析为实验功能。
+**v0.0.6：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.6)。优化录音、历史和报告界面。
 
 [中文](#安装和开发) · [English](#english) · [Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
 
 ## 安装和开发
 
-| 平台 | v0.0.5 安装包 | SHA-256 |
+| 平台 | v0.0.6 安装包 | SHA-256 |
 | --- | --- | --- |
-| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/SHA256SUMS) |
-| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/SHA256SUMS) |
+| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/dsh-voice-notes-0.0.6.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/SHA256SUMS) |
+| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/dsh-voice-notes-0.0.6.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/SHA256SUMS) |
 
-1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.5.tgz -Algorithm SHA256`，与校验文件比对。
+1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.6.tgz -Algorithm SHA256`，与校验文件比对。
 2. macOS 和 Windows 使用同一个安装包。在 Harness 的「插件」页添加 `.tgz`，启用后重启。在侧栏打开「语音速记」。若已安装其他语音速记本地包，先卸载旧包。
 
 macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、四人会议转写和历史回放，实体麦克风尚未验证。参见 [Windows 测试记录](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml)。
 
-打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.5。
+打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.6。
 
 ## 使用
 
@@ -77,7 +77,7 @@ v0.0.4 的另一项实验功能。在历史卡片打开「表达解读（潜台�
 
 ## English
 
-[Download v0.0.5 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.5). Computer audio and the two meeting analysis tools are experimental.
+[Download v0.0.6 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.6). This release simplifies recording, history and reports.
 
 ### Computer audio (experimental)
 
@@ -92,11 +92,11 @@ Voice Notes provides local audio transcription, speaker diarization, meeting sum
 
 ### Install
 
-Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.5/dsh-voice-notes-0.0.5.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
+Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/dsh-voice-notes-0.0.6.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.6/dsh-voice-notes-0.0.6.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
 
 Tested with Harness Desktop 0.2.2-rc.3 on macOS. Installation, four-speaker transcription, and archive playback were verified on the official Windows x64 build. Physical microphone capture on Windows has yet to be tested. See the [Windows test run](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml).
 
-The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.5.
+The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.6.
 
 ### Use
 
