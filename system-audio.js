@@ -91,7 +91,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
   const snapshot = (session) => ({ id: session.id, recordingId: session.recording.id, active: session.active,
     code: session.code ?? null, seconds: session.bytes / PCM_BYTES_PER_SECOND });
 
-  async function start({ language = 'auto', confirmed }, signal) {
+  async function start({ language = 'auto', confirmed, reportKind }, signal) {
     if (confirmed !== true) throw new SystemAudioError('confirmation', 400);
     if (busy()) throw new SystemAudioError('busy');
     starting = true;
@@ -100,7 +100,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
       signal?.throwIfAborted();
       const executable = await getHelper(platform, arch);
       signal?.throwIfAborted();
-      const recording = await recordings.save({ text: '', live: true, mimeType: 'audio/wav', source: 'system', systemPcm: true, language });
+      const recording = await recordings.save({ text: '', live: true, mimeType: 'audio/wav', source: 'system', systemPcm: true, language, reportKind });
       const child = launch(executable, args, { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: helperEnvironment() });
       let resolveReady, rejectReady;
       const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
@@ -125,10 +125,9 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
       if (signal?.aborted) abort();
       const startup = setTimeout(() => { endProcess(session, 'noSamples'); rejectReady(new SystemAudioError('noSamples', 503)); }, 45_000);
       session.watchdog = setInterval(() => {
-        if (session.bytes && Date.now() - session.lastData > 6000) endProcess(session, 'noSamples');
-        if (session.bytes && !session.attached && Date.now() - session.startedAt > 10_000) endProcess(session, 'disconnected');
+        if (session.receivedSamples && Date.now() - session.lastData > 6000) endProcess(session, 'noSamples');
+        if (session.receivedSamples && !session.attached && Date.now() - session.firstSampleAt > 10_000) endProcess(session, 'disconnected');
       }, 1000);
-      session.startedAt = Date.now();
       session.watchdog.unref?.();
       session.deadline = setTimeout(() => endProcess(session, 'limit'), SYSTEM_AUDIO_SECONDS * 1000);
       session.deadline.unref?.();
@@ -148,7 +147,16 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
             const bytes = remainder.length ? Buffer.concat([remainder, data]) : data;
             const aligned = bytes.length - bytes.length % 2;
             remainder = bytes.subarray(aligned);
-            if (aligned) { pieces.push(Buffer.from(bytes.subarray(0, aligned))); length += aligned; clearTimeout(startup); resolveReady(); }
+            if (aligned) {
+              pieces.push(Buffer.from(bytes.subarray(0, aligned)));
+              length += aligned;
+              if (!session.receivedSamples) {
+                session.receivedSamples = true;
+                session.firstSampleAt = Date.now();
+                clearTimeout(startup);
+                resolveReady();
+              }
+            }
             if (length >= PCM_BYTES_PER_SECOND) await commit();
           }
           if (remainder.length) throw new SystemAudioError('captureFailed');

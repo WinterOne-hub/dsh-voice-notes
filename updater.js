@@ -35,33 +35,51 @@ function isNewer(version, installed) {
 }
 
 async function fetchBytes(fetcher, url, limit, redirectHosts = new Set()) {
-  const signal = AbortSignal.timeout(18_000);
-  for (let redirects = 0; redirects <= 3; redirects++) {
-    const response = await fetcher(url, { signal, redirect: 'manual', credentials: 'omit' });
-    if ([301, 302, 303, 307, 308].includes(response.status)) {
-      await response.body?.cancel();
-      const location = response.headers.get('location');
-      if (!location) break;
-      const target = new URL(location, url);
-      if (target.protocol !== 'https:' || target.port || target.username || target.password ||
-          !redirectHosts.has(target.hostname)) break;
-      url = target;
-      continue;
-    }
-    if (!response.ok || !response.body || Number(response.headers.get('content-length')) > limit) {
-      await response.body?.cancel();
-      break;
-    }
-    const parts = [];
-    let size = 0;
-    for await (const part of response.body) {
-      size += part.byteLength;
-      if (size > limit) throw new Error('Download too large');
-      parts.push(part);
-    }
-    return Buffer.concat(parts, size);
+  const controller = new AbortController();
+  const downloading = redirectHosts.size > 0;
+  const signal = downloading
+    ? AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)])
+    : AbortSignal.timeout(18_000);
+  let idleTimer;
+  function resetIdleTimer() {
+    if (!downloading) return;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => controller.abort(), 18_000);
+    idleTimer.unref?.();
   }
-  throw new Error('Download failed');
+  resetIdleTimer();
+  try {
+    for (let redirects = 0; redirects <= 3; redirects++) {
+      const response = await fetcher(url, { signal, redirect: 'manual', credentials: 'omit' });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        await response.body?.cancel();
+        const location = response.headers.get('location');
+        if (!location) break;
+        const target = new URL(location, url);
+        if (target.protocol !== 'https:' || target.port || target.username || target.password ||
+            !redirectHosts.has(target.hostname)) break;
+        resetIdleTimer();
+        url = target;
+        continue;
+      }
+      if (!response.ok || !response.body || Number(response.headers.get('content-length')) > limit) {
+        await response.body?.cancel();
+        break;
+      }
+      const parts = [];
+      let size = 0;
+      for await (const part of response.body) {
+        size += part.byteLength;
+        if (size > limit) throw new Error('Download too large');
+        parts.push(part);
+        if (part.byteLength) resetIdleTimer();
+      }
+      return Buffer.concat(parts, size);
+    }
+    throw new Error('Download failed');
+  } finally {
+    clearTimeout(idleTimer);
+  }
 }
 
 async function latestRelease(fetcher) {
@@ -119,7 +137,7 @@ export function createUpdater({ dataRoot, getManager, isBusy, fetcher = fetch })
 
   async function check(force) {
     if (checking) return checking;
-    if (checked && Date.now() - checked.at < (force || checked.error ? retryMs : cacheMs)) {
+    if (!force && checked && Date.now() - checked.at < (checked.error ? retryMs : cacheMs)) {
       if (checked.error) throw checked.error;
       return checked.release;
     }

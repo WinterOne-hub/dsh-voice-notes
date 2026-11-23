@@ -231,12 +231,12 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   }
   const body = new Element();
   const sandbox = {
-    AbortController, AbortSignal, Blob, DataView, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
+    AbortController, AbortSignal, Blob, DataView, Range: { START_TO_START: 0, END_TO_END: 2 }, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
     setInterval, clearInterval, setTimeout, clearTimeout, queueMicrotask,
     document: { body, createElement: () => new Element() },
-    navigator: { mediaDevices: { getUserMedia: async () => { if (runtime.forbidMicrophone) throw new Error('Microphone must remain off'); return stream; } } },
+    navigator: { mediaDevices: { getUserMedia: async () => { if (runtime.forbidMicrophone) throw new Error('Microphone must remain off'); return runtime.microphone ?? stream; } } },
     window: {
-      AudioContext,
+      AudioContext: runtime.AudioContext ?? AudioContext,
       confirm: runtime.confirm,
       localStorage: { getItem: () => JSON.stringify({ sourceLanguage: 'en', ...preferences }) },
       __ModuleLoader__: { load: ({ factory }) => factory(() => runtime.React ?? {}) },
@@ -273,6 +273,7 @@ function waitFor(store, predicate) {
 test('client archives the audio and raw text without model editing when a later segment fails', async (t) => {
   const { call, state, dataRoot } = await fixture(t);
   const { engine, store, begin, finish, ingestSamples, finalizeSegment } = await bootClient(t, call);
+  store.set({ reportMode: true });
   await begin(null, undefined, false, 'studio');
   engine.capture.recorder.ondataavailable({ data: new Blob(['head']) });
   ingestSamples(new Float32Array(16000), engine.generation);
@@ -283,6 +284,7 @@ test('client archives the audio and raw text without model editing when a later 
   await finish('stop');
   assert.equal(store.get().phase, 'result');
   assert.equal(store.get().pendingSegments, 1);
+  assert.match(store.get().reportError, /补转/);
   assert.equal(state.modelCalls, 0);
   const archive = createRecordingStore(join(dataRoot, 'recordings'));
   const [saved] = await archive.list();
@@ -526,7 +528,7 @@ test('file import persists audio and timestamps and re-transcription keeps the e
   await call(`${path}/segments/0`, 'PATCH', { correction: 'Earlier corrected text' });
   state.speechText = 'New transcript';
   const newId = await importAudio(() => audio, {
-    title: 'Imported test (new transcription)', mimeType, language: 'zh', source: 'retranscription',
+    title: 'Imported test (new transcription)', mimeType, language: 'zh', source: 'retranscription', reportKind: 'learning',
   });
   assert.notEqual(newId, id);
   const archives = await createRecordingStore(join(dataRoot, 'recordings')).list();
@@ -535,6 +537,7 @@ test('file import persists audio and timestamps and re-transcription keeps the e
   const newer = archives.find((item) => item.id === newId);
   assert.equal(earlier.segments[0].correction, 'Earlier corrected text');
   assert.equal(newer.segments[0].text, 'New transcript');
+  assert.equal(newer.reportKind, 'learning');
   assert.deepEqual(state.speechCalls, ['en', 'en', 'zh', 'zh']);
   assert.equal(state.modelCalls, 0);
   assert.equal(store.get().importError, '');
@@ -1059,4 +1062,67 @@ test('computer audio confirmation discloses enabled model processing and cancel 
   assert.match(confirmation, /转写文字发送/);
   assert.equal(store.get().phase, 'idle'); assert.equal(engine.capture, null);
   assert.equal(nativeRequests, 0); assert.equal(state.modelCalls, 0);
+});
+
+test('cross-segment sharing excludes folded original wording but includes it when opened', async (t) => {
+  const { call } = await fixture(t);
+  const { readTranscriptSelection } = await bootClient(t, call);
+  let closed = true;
+  const details = { children: [] };
+  const block = (text, folded = false) => ({
+    text, closest: (selector) => folded && closed && selector.startsWith('details') ? details : null,
+  });
+  const first = block('Blue apples'), original = block('Red apples', true), last = block('Green pears');
+  const blocks = [first, original, last];
+  const bounds = { left: 10, right: 50, top: 20, bottom: 40 };
+  const root = {
+    contains: () => true, querySelectorAll: () => blocks, getBoundingClientRect: () => bounds,
+  };
+  const selection = {
+    anchorNode: { nodeType: 3, parentElement: { closest: () => first } },
+    focusNode: { nodeType: 3, parentElement: { closest: () => last } },
+    rangeCount: 1, isCollapsed: false,
+    getRangeAt: () => ({
+      intersectsNode: () => true, getBoundingClientRect: () => bounds,
+      cloneRange: () => {
+        let selected;
+        return { selectNodeContents: (node) => { selected = node; }, compareBoundaryPoints: () => 0, toString: () => selected.text };
+      },
+    }),
+  };
+  assert.equal(readTranscriptSelection(root, selection).text, 'Blue apples\nGreen pears');
+  closed = false;
+  assert.equal(readTranscriptSelection(root, selection).text, 'Blue apples\nRed apples\nGreen pears');
+});
+
+test('microphone initialization failure releases the acquired track', async (t) => {
+  const { call } = await fixture(t);
+  let stopped = 0;
+  const { begin, store } = await bootClient(t, call, {}, {
+    microphone: { getTracks: () => [{ stop: () => { stopped++; } }] },
+    AudioContext: class { state = 'suspended'; async resume() { throw new Error('Initialization failed'); } },
+  });
+  await begin(null, undefined, false, 'studio');
+  assert.equal(store.get().phase, 'error');
+  assert.equal(stopped, 1);
+});
+
+test('reports become stale after correction and stale work cannot overwrite them', async (t) => {
+  const { call } = await fixture(t);
+  const { data: { recording: { id } } } = await call(API + '/recordings', 'POST', { text: 'Friday', report: 'Deliver Friday' });
+  const path = API + '/recordings/' + id;
+  const before = (await call(path)).data.recording;
+  const corrected = (await call(path, 'PATCH', { correction: 'Monday' })).data.recording;
+  assert.equal(corrected.reportStale, true);
+  await call(path, 'PATCH', { reportKind: 'learning' });
+  assert.equal((await call(path)).data.recording.reportKind, 'learning');
+  assert.notEqual(corrected.reportSource, before.reportSource);
+  assert.equal((await call(path, 'PATCH', { report: 'Late Friday result', reportSource: before.reportSource })).status, 409);
+  assert.equal((await call(path)).data.recording.report, 'Deliver Friday');
+  const updated = (await call(path, 'PATCH', {
+    report: 'Deliver Monday', reportKind: 'learning', reportSource: corrected.reportSource,
+  })).data.recording;
+  assert.equal(updated.reportStale, false);
+  assert.equal(updated.reportKind, 'learning');
+  assert.equal((await call(path, 'PATCH', { correction: 'Tuesday' })).data.recording.reportStale, true);
 });

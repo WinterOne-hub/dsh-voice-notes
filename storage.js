@@ -11,7 +11,7 @@ import { constants } from 'node:fs';
 import { checkSource, CheckError } from './meeting-check.js';
 import { interpretationSource } from './meeting-interpretation.js';
 import { lstat, mkdir, open, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { protectWindowsDirectory } from './windows-private-directory.js';
@@ -102,6 +102,22 @@ export function correctedTranscript(meta) {
   if (!meta.segments) return typeof meta.correction === 'string' ? meta.correction : undefined;
   if (!meta.segments.some((part) => typeof part.correction === 'string')) return undefined;
   return textOf(meta.segments, true);
+}
+
+export function reportSource(meta) {
+  const source = meta.meeting
+    ? [meta.meeting.speakers, meta.meeting.turns.map((turn) => [
+      turn.start, turn.end, turn.speakerId, turn.overlap, turn.correction ?? turn.text,
+    ])]
+    : correctedTranscript(meta) ?? meta.text;
+  return createHash('sha256').update(JSON.stringify(source ?? '')).digest('hex');
+}
+
+export function reportPending(meta) {
+  if (recordingStatus(meta) === 'recording') return true;
+  return meta.meeting
+    ? meta.meeting.turns.some((turn) => !String(turn.correction ?? turn.text ?? '').trim())
+    : Boolean(meta.segments?.some((part) => part.state !== 'ready'));
 }
 
 const windows = process.platform === 'win32';
@@ -229,7 +245,9 @@ export function createRecordingStore(directory) {
   async function change(id, work) {
     return serialize(checkId(id), async () => {
       const meta = await readMeta(id);
+      const legacySource = meta.report && !meta.reportSource ? reportSource(meta) : undefined;
       await work(meta);
+      if (legacySource && !meta.reportSource && legacySource !== reportSource(meta)) meta.reportStale = true;
       await writeMeta(meta);
       return meta;
     });
@@ -268,7 +286,7 @@ export function createRecordingStore(directory) {
   }
 
   async function save({ audio, mimeType, text, translation, duration, language, providerId,
-    title, report, diagnostics, source, systemPcm = false, live = false }) {
+    title, report, diagnostics, source, reportKind, systemPcm = false, live = false }) {
     await ensure();
     const mime = normalizeMime(mimeType);
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -290,6 +308,7 @@ export function createRecordingStore(directory) {
       title: cleanTitle(title) || defaultTitle(cleanText),
       ...(source === 'import' || source === 'retranscription' || source === 'system' ? { source, customTitle: Boolean(cleanTitle(title)) } : {}),
     };
+    if (['meeting', 'learning'].includes(reportKind)) meta.reportKind = reportKind;
     if (source === 'system' && systemPcm === true) meta.systemPcm = true;
     if (diagnostics && typeof diagnostics === 'object') {
       meta.diagnostics = {
@@ -410,6 +429,7 @@ export function createRecordingStore(directory) {
         if (snapshot && (snapshot.end !== part.end || snapshot.checkpoint !== part.checkpoint)) {
           return meta;
         }
+        const legacySource = meta.report && !meta.reportSource ? reportSource(meta) : undefined;
         Object.assign(part, outcome);
         if (part.state === 'ready') {
           delete part.error;
@@ -422,6 +442,7 @@ export function createRecordingStore(directory) {
           meta.text = textOf(meta.segments);
           if (!meta.customTitle) meta.title = cleanTitle(meta.text.slice(0, 40)) || meta.title;
         }
+        if (legacySource && legacySource !== reportSource(meta)) meta.reportStale = true;
         await writeMeta(meta);
         if (part.state === 'ready') {
           await rm(waveFile(id, sequence), { force: true }).catch(() => {});
@@ -513,10 +534,18 @@ export function createRecordingStore(directory) {
 
     update(id, patch) {
       return change(id, (meta) => {
-        if (typeof patch.report === 'string' && meta.meeting) {
+        if (typeof patch.report === 'string' && patch.reportSource !== undefined) {
+          if (patch.reportSource !== reportSource(meta) || reportPending(meta)) {
+            throw new StorageError(409, '转写已更新，请重新生成报告');
+          }
+          meta.reportSource = patch.reportSource;
+          delete meta.reportStale;
+          delete meta.meetingReportStale;
+        } else if (typeof patch.report === 'string' && meta.meeting) {
           if (patch.meetingRevision === meta.meeting.revision) delete meta.meetingReportStale;
           else meta.meetingReportStale = true;
         }
+        if (['meeting', 'learning'].includes(patch.reportKind)) meta.reportKind = patch.reportKind;
         for (const key of ['translation', 'editedText', 'report']) {
           if (typeof patch[key] === 'string') meta[key] = patch[key].slice(0, 200_000);
         }

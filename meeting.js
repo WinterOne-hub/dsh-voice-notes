@@ -22,7 +22,7 @@ const ASSETS = [
   {
     file: 'embedding.onnx', bytes: 39593761,
     sha256: '1a331345f04805badbb495c775a6ddffcdd1a732567d5ec8b3d5749e3c7a5e4b',
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx',
+    url: 'https://huggingface.co/Maxkuo/eres2net-base-sv-zh-cn-onnx/resolve/533e660fabc9553c0dc0cb5b395b24eac1ece0ad/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx?download=true',
   },
 ];
 
@@ -78,17 +78,18 @@ async function persistModel(path, input, asset, signal, status) {
 }
 
 async function download(path, asset, signal) {
-  const hosts = ['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'];
+  const hosts = ['huggingface.co', 'cas-bridge.xethub.hf.co', 'cdn-lfs.huggingface.co', 'cdn-lfs.hf.co', 'cdn-lfs-us-1.hf.co'];
+  const isDownloadHost = (host) => hosts.includes(host) || host.endsWith('.cdn.hf.co');
   let url = new URL(asset.url);
   let response;
   for (let i = 0; i <= 3; i++) {
-    response = await fetch(url, { signal, credentials: 'omit', redirect: 'manual', referrerPolicy: 'no-referrer' });
+    response = await fetch(url, { signal, credentials: 'omit', cache: 'no-store', redirect: 'manual', referrerPolicy: 'no-referrer' });
     if (![301, 302, 303, 307, 308].includes(response.status)) break;
     const location = response.headers.get('location');
     await response.body?.cancel();
     if (!location || i === 3) throw new MeetingError('downloadFailed', 502);
     url = new URL(location, url);
-    if (url.protocol !== 'https:' || url.port || url.username || url.password || !hosts.includes(url.hostname)) {
+    if (url.protocol !== 'https:' || url.port || url.username || url.password || !isDownloadHost(url.hostname)) {
       throw new MeetingError('downloadFailed', 502);
     }
   }
