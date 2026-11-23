@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.5';
+    const BUILD = '0.0.6';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -316,6 +316,18 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'history.refreshed': '已刷新 · {n} 条录音',
       'history.refreshError': '刷新失败：{message}',
       'history.report': '总结报告',
+      'record.mic': '录麦克风',
+      'record.system': '录电脑声音',
+      'record.active': '正在录制{source}',
+      'record.start': '准备录音',
+      'history.play': '播放',
+      'history.pause': '暂停',
+      'history.transcript': '转写',
+      'history.analysis': '分析',
+      'history.moreActions': '更多',
+      'report.goPending': '去补转',
+      'report.goSpeakers': '查看多人转写',
+      'report.regenerate': '重新生成',
       'share.transcript': '分享到新会话',
       'share.selection': '将选中文字分享到新会话',
       'share.preparing': '正在打开新会话…',
@@ -653,6 +665,18 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'history.refreshed': 'Refreshed · {n} recordings',
       'history.refreshError': 'Refresh failed: {message}',
       'history.report': 'Summary report',
+      'record.mic': 'Record microphone',
+      'record.system': 'Record computer audio',
+      'record.active': 'Recording {source}',
+      'record.start': 'Ready to record',
+      'history.play': 'Play',
+      'history.pause': 'Pause',
+      'history.transcript': 'Transcript',
+      'history.analysis': 'Analysis',
+      'history.moreActions': 'More',
+      'report.goPending': 'Go to missing segments',
+      'report.goSpeakers': 'View speaker transcript',
+      'report.regenerate': 'Regenerate',
       'share.transcript': 'Share to new conversation',
       'share.selection': 'Share selected text to new conversation',
       'share.preparing': 'Opening a new conversation…',
@@ -839,20 +863,20 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vl-translation-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary, #555); user-select: text; }
 .vl-sep { flex: 1; }
 @media (prefers-reduced-motion: reduce) { .vl-pulse, .vl-spin, .vl-progress[data-indeterminate="true"] i, .vl-panel { animation: none; } }
-.vls-page { height: 100%; overflow-y: auto; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 14px; }
+.vls-page { height: 100%; overflow-y: auto; background: var(--dsw-alias-bg-base, #fafafa); color: var(--dsw-alias-label-primary, #171717); font-size: 14px; }
 .vls-inner { max-width: 880px; margin: 0 auto; padding: 28px 30px 48px; }
-.vls-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.vls-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 .vls-title { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
 .vls-sub { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
 .vls-head-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .vls-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 16px; background: var(--dsw-alias-bg-layer-1); padding: 16px 16px 14px; }
 .vls-rec { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.vls-mic { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 54px; height: 54px; padding: 0; border: 0; border-radius: 50%; background: var(--dsw-alias-button-info-fill); color: #fff; cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); transition: background .15s ease, transform .12s ease; }
-.vls-mic:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover); transform: translateY(-1px); }
+.vls-mic { gap: 8px; display: inline-flex; flex: none; align-items: center; justify-content: center; min-height: 44px; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--dsw-alias-button-info-fill, #3458ce); font: inherit; font-weight: 600; text-align: left; color: #fff; cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); transition: background .15s ease, transform .12s ease; }
+.vls-mic:hover:not(:disabled) { background: var(--dsw-alias-button-info-hover, #2949b8); transform: translateY(-1px); }
 .vls-mic:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 3px; }
 .vls-mic:disabled { opacity: .5; cursor: default; }
-.vls-mic[data-recording="true"] { background: var(--dsw-alias-state-error-primary); }
-.vls-mic[data-recording="true"]:hover { background: var(--dsw-alias-state-error-primary); }
+.vls-mic[data-recording="true"] { background: var(--dsw-alias-state-error-primary, #b4232c); }
+.vls-mic[data-recording="true"]:hover { background: var(--dsw-alias-state-error-primary, #b4232c); }
 .vls-rec-main { min-width: 0; }
 .vls-time { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .01em; line-height: 1.1; }
 .vls-rec-state { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
@@ -872,13 +896,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-save[data-error="true"] { color: var(--dsw-alias-state-error-primary); }
 .vls-setup { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--dsw-alias-border-l1); }
 .vls-history { margin-top: 26px; }
-.vls-history-head { display: flex; align-items: baseline; gap: 8px; }
+.vls-history-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
 .vls-title2 { margin: 0; font-size: 15px; font-weight: 600; }
 .vls-count { font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
 .vls-history-actions { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
-.vls-history-actions .vls-search { min-width: 0; }
+.vls-history-actions .vls-search { min-width: 0; width: 100%; }
 .vls-history-actions .vls-mini { flex: none; white-space: nowrap; }
 .vls-update { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 5px; }
+.vls-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .vls-update [role="alert"] { color: var(--dsw-alias-state-error-primary); }
 .vls-path { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 8px 0 12px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .vls-path code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; }
@@ -889,6 +914,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .vls-history-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .vls-history-actions-row [data-primary="true"] { color: var(--dsw-alias-brand-primary, #3267d6); }
+.vls-history-actions-row > button, .vls-history-actions-row > details > summary { min-height: 34px; font-size: 12px; }
+.vls-card-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.vls-card-tools > details { min-width: 0; }
+.vls-card-tools summary { cursor: pointer; padding: 7px; font-size: 12px; }
+.vls-card-tools details[open] { flex-basis: 100%; }
+.vls-history-actions-row button[aria-expanded="true"] { background: var(--dsw-alias-bg-layer-2, #eee); }
+.vls-record-source { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+.vls-report-content { margin: 10px 0; padding: 12px 14px; border-radius: 8px; background: var(--dsw-alias-bg-layer-2, #f5f6f8); font-size: 14px; line-height: 1.65; overflow-wrap: anywhere; user-select: text; }
+.vls-report-content :is(h3,h4,h5) { font-size: 1em; margin: 12px 0 4px; }
+.vls-report-content h3 { font-size: 1.15em; }
+.vls-report-content :is(p,ol,ul) { margin: 4px 0 8px; }
+.vls-report-content p { white-space: pre-line; }
+.vls-report-content :is(ol,ul) { padding-inline-start: 1.5em; }
+.vls-report-content > :first-child { margin-top: 0; }
+.vls-report-content > :last-child { margin-bottom: 0; }
+.vls-report-notice { margin: 0 0 8px; padding: 8px 10px; background: var(--dsw-alias-bg-layer-2, #f5f6f8); border-radius: 8px; }
+.vls-segment[data-pending-focus="true"] { outline: 2px solid var(--dsw-alias-brand-primary, #3267d6); outline-offset: -2px; }
 .vls-item-tools { width: 100%; }
 .vls-item-tools summary { width: fit-content; cursor: pointer; }
 .vls-transcript-open { max-height: min(400px, 62vh); overflow: auto; overscroll-behavior: contain; margin-block: 8px; padding-inline: 6px; }
@@ -949,7 +991,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-correct { flex-basis: 100%; display: grid; gap: 6px; }
 .vls-correct textarea { resize: vertical; width: 100%; box-sizing: border-box; }
 .vls-foot { margin-top: 18px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
-@media (max-width: 640px) { .vls-inner { padding: 18px 16px 36px; } .vls-rec-side { margin-left: 0; } }
+@media (max-width: 640px) {
+  .vls-inner { padding: 16px 14px 32px; }
+  .vls-rec-side { margin-left: 0; }
+  .vls-history-actions { flex: 1 1 100%; margin-left: 0; }
+  .vls-history-actions .vls-search { flex: 1; }
+  .vls-history-actions-row > button { min-height: 38px; }
+}
 `;
 
     /** Tiny external store: the activity bar and the floating panel share it. */
@@ -2653,6 +2701,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const size = props.size ?? 18;
       const paths = {
         mic: 'M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v5.5A3.5 3.5 0 0 0 12 15Zm-6-5a6 6 0 0 0 12 0M12 18v3m-3 0h6',
+        computer: 'M3 4h18v13H3zM12 17v4m-4 0h8',
         stop: 'M7 7h10v10H7z',
         close: 'M7 7l10 10M17 7L7 17',
         translate: 'M4 6h9M8.5 6c0 4-2 7-4.5 9m2-5c1.5 2.5 3.5 4 6 5m.5-9 4 10m1.5-4h-7',
@@ -3515,6 +3564,40 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return segments?.find((part) => seconds >= part.start && seconds < part.end)?.sequence ?? null;
     }
 
+    function ReportBody({ text }) {
+      const blocks = [];
+      let list;
+      let paragraph = [];
+      const emphasis = (value) => value.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
+        index % 2 ? h('strong', { key: index }, part.slice(2, -2)) : part);
+      const flush = () => {
+        if (paragraph.length) blocks.push(h('p', { key: blocks.length }, emphasis(paragraph.join('\n'))));
+        if (list) blocks.push(h(list.tag, { key: blocks.length, ...(list.tag === 'ol' ? { start: list.start } : {}) },
+          list.items.map((item, n) => h('li', { key: n }, emphasis(item)))));
+        paragraph = [];
+        list = null;
+      };
+      for (const line of text.split(/\r?\n/)) {
+        const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+        const item = /^\s*(?:[-*+]\s+|(\d{1,6})[.)]\s+)(.+)$/.exec(line);
+        if (heading) {
+          flush();
+          blocks.push(h(`h${Math.min(5, heading[1].length + 2)}`, { key: blocks.length }, emphasis(heading[2])));
+        } else if (item) {
+          const tag = item[1] ? 'ol' : 'ul';
+          if (list?.tag !== tag) { flush(); list = { tag, start: Number(item[1]), items: [] }; }
+          list.items.push(item[2]);
+        } else if (!line.trim()) {
+          flush();
+        } else {
+          if (list) flush();
+          paragraph.push(line.trim());
+        }
+      }
+      flush();
+      return h('div', { className: 'vls-report-content' }, blocks);
+    }
+
     function ReportTemplateSelect({ value, setValue, t, disabled, allowAuto }) {
       const choices = allowAuto ? ['auto', 'meeting', 'learning'] : ['meeting', 'learning'];
       return h('label', { className: 'vls-lang' }, t('report.kind'),
@@ -3897,6 +3980,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const [rename, setRename] = React.useState(false);
       const [title, setTitle] = React.useState(item.title);
       const [playingPart, setPlayingPart] = React.useState(null);
+      const [playing, setPlaying] = React.useState(false);
+      const [playerVisible, setPlayerVisible] = React.useState(false);
+      const [pendingJump, setPendingJump] = React.useState(false);
       const [jump, setJump] = React.useState(null);
       const [editing, setEditing] = React.useState(null);
       const [correction, setCorrection] = React.useState('');
@@ -3960,6 +4046,22 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         row?.focus({ preventScroll: true });
       }, [jump, term, expanded, details]);
 
+      React.useEffect(() => {
+        if (!pendingJump || !expanded || !details || !segmentList.current) return;
+        const row = segmentList.current.querySelector('[data-pending-focus="true"]');
+        if (row) {
+          row.scrollIntoView({ block: 'nearest' });
+          row.focus({ preventScroll: true });
+        }
+        setPendingJump(false);
+      }, [pendingJump, expanded, details]);
+
+      function goToPending() {
+        setTool('');
+        setExpanded(true);
+        setPendingJump(true);
+      }
+
       function syncPlayback(audio = audioRef.current) {
         if (!audio) return;
         setPlayingPart(segmentAtTime(details?.segments, audio.currentTime));
@@ -3987,6 +4089,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
       function foldTranscript(restoreFocus) {
         setExpanded(false);
+        setPendingJump(false);
         setJump(null);
         setSelection(null);
         if (restoreFocus) {
@@ -4095,9 +4198,19 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         );
       }
 
+      function togglePlayback() {
+        const audio = audioRef.current;
+        if (!audio) return;
+        setPlayerVisible(true);
+        setError('');
+        if (audio.paused) void audio.play().catch((failure) => setError(messageOf(failure)));
+        else audio.pause();
+      }
+
       function seek(seconds) {
         const audio = audioRef.current;
         if (!audio) return;
+        setPlayerVisible(true);
         setError('');
         try {
           audio.currentTime = seconds;
@@ -4208,6 +4321,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
 
       const active = item.status === 'recording';
+      const pendingCount = details?.pendingCount ?? item.pendingCount ?? 0;
+      const firstPending = details?.segments?.find((part) => part.state !== 'ready');
+      const reportStale = Boolean(details?.reportStale || details?.meetingReportStale);
       const hasDetails = Boolean(original || text || item.segmentCount > 0 || item.hasCorrections);
       const hasTranscript = details?.meeting || item.hasMeeting || (details ? Boolean(text.trim()) : (item.hasTranscript ?? Boolean(text)));
       const matches = details?.segments?.filter(segmentMatches).length ?? 0;
@@ -4243,40 +4359,47 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           h('span', null, item.size ? formatBytes(item.size) : t('studio.noAudio')),
         ),
         h('div', { className: 'vls-history-actions-row' },
+          item.audioUrl && !active ? h('button', {
+            type: 'button', className: 'vl-btn', onClick: togglePlayback,
+          }, t(playing ? 'history.pause' : 'history.play')) : null,
           hasDetails ? h('button', {
-            type: 'button', className: 'vls-mini', ref: cardTop, 'aria-expanded': expanded,
+            type: 'button', className: 'vls-mini', ref: cardTop, 'data-primary': 'true', 'aria-expanded': expanded,
             onClick: () => expanded ? foldTranscript(false) : setExpanded(true),
-          }, t(expanded ? 'history.foldTranscript' : item.segmentCount ? 'history.details' : 'history.fullText')) : null,
-          hasTranscript && !active ? h('button', {
-            type: 'button', className: 'vls-mini', 'data-primary': 'true', disabled: Boolean(busy),
-            onClick: () => share(),
-          }, t(busy === 'share' ? 'share.preparing' : 'share.transcript')) : null,
-          !active && item.audioUrl ? h('button', {
-            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'meeting',
-            onClick: () => setTool(tool === 'meeting' ? '' : 'meeting'),
-          }, t(item.hasMeeting || details?.meeting ? 'meeting.view' : 'meeting.action')) : null,
-          !active && item.audioUrl ? h('button', {
-            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
-            disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
-          }, t('import.retranscribe')) : null,
-          !active && (hasTranscript || item.hasCheck) ? h('button', {
-            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'check',
-            onClick: () => setTool(tool === 'check' ? '' : 'check'),
-          }, t('check.title')) : null,
-          !active && (hasTranscript || item.hasInterpretation) ? h('button', {
-            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'interpretation',
-            onClick: () => setTool(tool === 'interpretation' ? '' : 'interpretation'),
-          }, t('interpret.title')) : null,
-          !active && (hasTranscript || item.hasReport) ? h('button', {
+          }, t(expanded ? 'history.foldTranscript' : 'history.transcript')) : null,
+          !active && (hasTranscript || item.hasReport || pendingCount) ? h('button', {
             type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
             onClick: () => setTool(tool === 'report' ? '' : 'report'),
           }, t('history.report')) : null,
-          item.matchingSegments > 0 && term
-            ? h('button', { type: 'button', className: 'vls-mini', onClick: locateMatch }, t('history.jump')) : null,
+          item.matchingSegments > 0 && term ? h('button', {
+            type: 'button', className: 'vls-mini', onClick: locateMatch,
+          }, t('history.jump')) : null,
         ),
-        h('details', { className: 'vls-item-tools', onToggle: (event) => setMoreOpen(event.currentTarget.open) },
-          h('summary', { className: 'vl-note' }, t('history.tools')),
+        h('div', { className: 'vls-card-tools' },
+          !active && (item.audioUrl || hasTranscript || item.hasCheck || item.hasInterpretation) ?
+            h('details', null,
+              h('summary', null, t('history.analysis')),
+              h('div', { className: 'vls-item-actions' },
+                item.audioUrl ? h('button', {
+                  type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'meeting',
+                  onClick: () => setTool(tool === 'meeting' ? '' : 'meeting'),
+                }, t(item.hasMeeting || details?.meeting ? 'meeting.view' : 'meeting.action')) : null,
+                hasTranscript || item.hasCheck ? h('button', {
+                  type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'check',
+                  onClick: () => setTool(tool === 'check' ? '' : 'check'),
+                }, t('check.title')) : null,
+                hasTranscript || item.hasInterpretation ? h('button', {
+                  type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'interpretation',
+                  onClick: () => setTool(tool === 'interpretation' ? '' : 'interpretation'),
+                }, t('interpret.title')) : null,
+              ),
+            ) : null,
+          h('details', { onToggle: (event) => setMoreOpen(event.currentTarget.open) },
+          h('summary', null, t('history.moreActions')),
           h('div', { className: 'vls-item-actions' },
+            !active && item.audioUrl ? h('button', {
+              type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'transcribe',
+              disabled: importing || Boolean(busy), onClick: () => setTool(tool === 'transcribe' ? '' : 'transcribe'),
+            }, t('import.retranscribe')) : null,
             original ? h('button', { type: 'button', className: 'vls-mini', disabled: !!busy,
               onClick: () => void run('copy', copyOriginal) }, copiedId === item.id ? t('studio.copied') : t('studio.copy')) : null,
             !active && item.downloadUrl
@@ -4292,6 +4415,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           ),
           derived(details?.editedText, t('model.edited')),
           derived(details?.translation, t('live.translation')),
+          ),
         ),
         rename ? h('form', { className: 'vls-item-head', onSubmit: renameRecording },
           h('input', { className: 'vls-input', 'aria-label': t('history.title'), value: title, required: true,
@@ -4301,13 +4425,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         ) : null,
         active ? h('p', { className: 'vl-note' }, t('history.active')) : null,
         item.status === 'interrupted' ? h('p', { className: 'vl-note' }, t('history.interrupted')) : null,
-        item.pendingCount ? h('p', { className: 'vl-note' }, t('history.pending', { n: item.pendingCount })) : null,
+        pendingCount && tool !== 'report' ? h('p', { className: 'vl-note' }, t('history.pending', { n: pendingCount })) : null,
         error ? h('p', { className: 'vls-error', role: 'status' }, error) : null,
-        item.audioUrl && !active ? h('audio', { className: 'vls-audio', controls: true, preload: 'none',
+        item.audioUrl && !active ? h('audio', { className: 'vls-audio', hidden: !playerVisible, controls: true, preload: 'none',
           src: item.audioUrl, ref: audioRef,
           onTimeUpdate: (event) => syncPlayback(event.currentTarget),
           onSeeking: (event) => syncPlayback(event.currentTarget),
-          onPlay: (event) => syncPlayback(event.currentTarget),
+          onPlay: (event) => { setPlaying(true); syncPlayback(event.currentTarget); },
+          onPause: () => setPlaying(false),
+          onEnded: () => setPlaying(false),
         }) : null,
         itemMeetingJob ? h('div', { className: 'vls-options-row', role: 'status' },
           h('span', { className: itemMeetingJob.error ? 'vls-error' : 'vl-note' }, t(`meeting.${itemMeetingJob.phase}`)),
@@ -4331,17 +4457,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             title: t('import.retranscribeHint'), onClick: retranscribe }, t('import.retranscribe')),
           h('p', { className: 'vl-note' }, t('import.retranscribeHint')),
         ) : null,
-        tool === 'report' ? h('section', { className: 'vls-report-block' },
+        tool === 'report' ? h('section', { className: 'vls-report-block', 'aria-label': t('history.report') },
+          details?.reportPending ? h('div', { className: 'vls-report-notice', role: 'status' },
+            h('span', null, pendingCount ? t('history.pending', { n: pendingCount }) : t('report.pending')), ' ',
+            firstPending ? h('button', { type: 'button', className: 'vl-btn', onClick: goToPending }, t('report.goPending'))
+              : details.meeting ? h('button', { type: 'button', className: 'vl-btn', onClick: () => setTool('meeting') },
+                t('report.goSpeakers')) : null,
+          ) : null,
+          reportStale ? h('p', { className: 'vls-report-notice', role: 'status' }, t('meeting.reportStale')) : null,
           hasTranscript ? h('div', { className: 'vls-options-row' },
             h(ReportTemplateSelect, { t, value: selectedReportKind, setValue: chooseReportKind, disabled: Boolean(busy) }),
             h(ReportLanguageSelect, { t, value: reportLanguage, setValue: setReportLanguage, disabled: Boolean(busy) }),
-            h('button', { type: 'button', className: 'vls-mini', disabled: Boolean(busy) || details?.reportPending, onClick: generateReport },
-              t(busy === 'report' ? 'studio.generating' : 'report.generate')),
+            h('button', { type: 'button', className: 'vls-mini', disabled: Boolean(busy) || !details || details.reportPending, onClick: generateReport },
+              t(busy === 'report' ? 'studio.generating' : reportStale ? 'report.regenerate' : 'report.generate')),
           ) : null,
           !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
-          details?.reportPending ? h('p', { className: 'vl-note' }, t('report.pending')) : null,
           details?.report ? h('div', null,
-            h('div', { className: 'vls-report-text' }, details.report),
+            h(ReportBody, { text: details.report }),
             h('button', { type: 'button', className: 'vls-mini', disabled: details.reportStale || details.meetingReportStale, onClick: () => void copy(details.report, `${item.id}:report`) },
               t(copiedId === `${item.id}:report` ? 'studio.copied' : 'studio.copyReport')),
           ) : null,
@@ -4350,6 +4482,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         expanded && !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
         expanded && details ? h('div', null,
           h('div', { className: 'vls-options-row' },
+            hasTranscript && !active ? h('button', { type: 'button', className: 'vl-btn', disabled: Boolean(busy),
+              onClick: () => share() }, t(busy === 'share' ? 'share.preparing' : 'share.transcript')) : null,
             h('input', {
               type: 'search', className: 'vls-input vls-search', value: recordingQuery, maxLength: 200,
               'aria-label': t('history.searchThis'), placeholder: t('history.searchThis'),
@@ -4366,7 +4500,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             details.segments?.length ? h('ol', { className: 'vls-segments', ref: segmentList }, details.segments.map((part) =>
               h('li', {
                 key: part.sequence, className: 'vls-segment', tabIndex: -1,
-                'data-sequence': part.sequence, 'aria-current': playingPart === part.sequence ? 'true' : undefined,
+                'data-sequence': part.sequence, 'data-pending-focus': pendingJump && firstPending === part ? 'true' : undefined, 'aria-current': playingPart === part.sequence ? 'true' : undefined,
               },
                 item.audioUrl && !active
                   ? h('button', { type: 'button', className: 'vls-mini vls-seek', onClick: () => seek(part.start) },
@@ -4407,7 +4541,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               onMouseDown: (event) => event.preventDefault(), onClick: () => share(selection.text) },
               t(busy === 'share' ? 'share.preparing' : 'share.selection')),
           ) : null,
-        (details?.reportStale || details?.meetingReportStale) && tool === 'report' ? h('p', { className: 'vl-note' }, t('meeting.reportStale')) : null,
         details?.derivedStale && tool === 'report' ? h('p', { className: 'vl-note' }, t('history.derivedStale')) : null,
       );
     }
@@ -4452,7 +4585,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         ? t(Object.hasOwn(EN, key) ? key : 'update.installFailed')
         : t(`update.${phase}`, { version: view.version });
       return h('div', { className: 'vls-update' },
-        h('span', { className: 'vls-sub', role: phase === 'error' ? 'alert' : 'status' }, message),
+        h('span', { className: phase === 'current' ? 'vls-sr-only' : 'vls-sub', role: phase === 'error' ? 'alert' : 'status' }, message),
         phase === 'available' && view.canInstall ? h('button', {
           type: 'button', className: 'vl-btn', disabled: busy, onClick: install,
         }, t('update.install')) : null,
@@ -4671,8 +4804,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const errorText =
         translatedError && translatedError !== errorKey ? translatedError : state.error;
 
+      const sourceName = t(studioSource === 'system' ? 'system.computer' : 'system.microphone');
+      const recordAction = t(recording ? 'studio.stop' : requesting ? 'studio.cancel' :
+        studioSource === 'system' ? 'record.system' : 'record.mic');
       const statusText = recording
-        ? t('phase.recording')
+        ? t('record.active', { source: sourceName })
         : requesting
           ? t(studioSource === 'system' ? 'system.requesting' : 'phase.requesting')
           : finishing
@@ -4680,10 +4816,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             : phase === 'setup'
               ? t('setup.title')
               : phase === 'result'
-                ? t('result.title')
+                ? (state.archiveStage === 'saved' ? stopFeedback(state, t) : t('result.title'))
                 : phase === 'error'
                   ? t('error.title')
-                  : modelText || t('studio.subtitle');
+                  : t('record.start');
 
       const original = state.finalText;
       const partial = state.partialText;
@@ -4857,7 +4993,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                     ? h(
                         React.Fragment,
                         null,
-                        h('pre', { className: 'vls-report-text' }, state.report),
+                        h(ReportBody, { text: state.report }),
                         h(
                           'button',
                           {
@@ -5002,6 +5138,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           h(
             'section',
             { className: 'vls-card' },
+            h('div', { className: 'vls-record-source' },
+              h('label', { className: 'vls-lang' },
+                t('system.source'),
+                h('select', { className: 'vl-select', value: studioSource,
+                  disabled: recording || requesting || finishing || state.importing,
+                  onChange: (event) => store.set({ captureSource: event.target.value }) },
+                  h('option', { value: 'microphone' }, t('system.microphone')),
+                  h('option', { value: 'system' }, t('system.computer')))),
+              studioSource === 'system' ? h('span', { className: 'vl-note' },
+                t('system.hint')) : null,
+            ),
             h(
               'div',
               { className: 'vls-rec' },
@@ -5011,16 +5158,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button',
                   className: 'vls-mic',
                   'data-recording': recording ? 'true' : 'false',
-                  disabled: phase === 'setup' || finishing || (state.meetingMode && state.meetingJob?.active && !recording),
-                  title: recording
-                    ? t('studio.stop')
-                    : requesting || finishing
-                      ? t('studio.cancel')
-                      : t('studio.record'),
-                  'aria-label': recording ? t('studio.stop') : t('studio.record'),
+                  disabled: phase === 'setup' || finishing || state.updating || state.importing || (state.meetingMode && state.meetingJob?.active && !recording),
                   onClick: onMic,
                 },
-                h(Icon, { name: recording ? 'stop' : 'mic', size: 22 }),
+                h(Icon, { name: recording ? 'stop' : requesting ? 'close' : studioSource === 'system' ? 'computer' : 'mic', size: 19 }),
+                recordAction,
               ),
               h(
                 'div',
@@ -5040,7 +5182,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               h(
                 'div',
                 { className: 'vls-rec-side' },
-                h(Waveform, { level: state.level, phase: state.elapsed }),
+                recording ? h(Waveform, { level: state.level, phase: state.elapsed }) : null,
                 h(
                   'span',
                   { className: 'vls-lang' },
@@ -5050,15 +5192,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               ),
             ),
             h('div', { className: 'vls-options-row' },
-              h('label', { className: 'vls-lang' },
-                t('system.source'),
-                h('select', { className: 'vl-select', value: studioSource,
-                  disabled: recording || requesting || finishing || state.importing,
-                  onChange: (event) => store.set({ captureSource: event.target.value }) },
-                  h('option', { value: 'microphone' }, t('system.microphone')),
-                  h('option', { value: 'system' }, t('system.computer')))),
-              studioSource === 'system' ? h('span', { className: 'vl-note' },
-                t('system.hint')) : null,
               h('label', { className: 'vls-lang' },
                 h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
                   onChange: (event) => store.set({ meetingMode: event.target.checked }) }),
