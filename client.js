@@ -48,7 +48,7 @@ window.__ModuleLoader__.load({
     const MAX_IMPORT_BYTES = 128 * 1024 ** 2;
     const MAX_IMPORT_SECONDS = 2 * 3600;
     const MAX_MEETING_SECONDS = 3600;
-    const SPEAKER_MODEL_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx';
+    const SPEAKER_MODEL_URL = 'https://huggingface.co/Maxkuo/eres2net-base-sv-zh-cn-onnx/resolve/533e660fabc9553c0dc0cb5b395b24eac1ece0ad/3dspeaker_speech_eres2net_base_sv_zh-cn_3dspeaker_16k.onnx';
     const SHORTCUTS = [
       ['off', 'shortcut.off'],
       ['KeyY', 'Ctrl+Shift+Y'],
@@ -1429,7 +1429,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       try {
         const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]);
         const status = await fetch(`${API}/meeting-models`, { signal, cache: 'no-store' }).then(readJsonResponse);
-        if (!(status.acceptedBytes ?? [status.bytes]).includes(file.size)) {
+        if (file.size !== status.bytes) {
           setStatus('integrity', true);
           return;
         }
