@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.6';
+    const BUILD = '0.0.7';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       ['ja', '日本語'],
       ['ko', '한국어'],
     ];
+    const UI_LANGUAGES = ['auto', 'zh', 'en'];
     const TARGETS = [
       ['off', 'translate.off'],
       ['en', 'English'],
@@ -68,6 +69,9 @@ window.__ModuleLoader__.load({
     /** Cadence of interim recognition while the current slice grows. */
     const PARTIAL_MS = 1_300;
     const CHECKPOINT_MS = 5000;
+    const QUIET_MS = 1800;
+    const CAPTURE_TIMEOUT_MS = 10_000;
+    const MAX_LATENCY_SAMPLES = 4096;
 
     /** AudioWorklet source: batch 128-frame renders into ~4096-sample messages. */
     const WORKLET_SOURCE = `
@@ -106,6 +110,27 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "help.title": "使用说明",
+      "ui.language": "界面语言",
+      "ui.auto": "跟随 Harness",
+      "help.microphone": "录下自己的声音",
+      "help.microphoneText": "选择「麦克风」，点击录音并允许麦克风访问。聊天输入框的麦克风可将听写插入草稿。",
+      "help.system": "戴耳机录下视频声音",
+      "help.systemText": "选择「电脑声音」，开始录制并确认。它采集本机播放的声音，包括同时播放的通知。支持 macOS 14.2+（Apple Silicon）和 Windows x64。",
+      "help.import": "转写已有录音",
+      "help.importText": "点击「导入音频」，选择本地文件。首次转写需下载识别模型。单个文件最多 128 MiB、2 小时。",
+      "help.meeting": "多人会议",
+      "help.meetingText": "录制或导入前勾选「多人会议」，也可在历史里识别说话人。处理结束后，在多人转写里修改名称或逐段调整归属。",
+      "help.history": "回听、搜索和导出",
+      "help.historyText": "在历史搜索录音或转写，点时间戳回听，或在转写中校对。TXT 导出在录音卡片的操作菜单中。",
+      "help.report": "报告与分享到新会话",
+      "help.reportText": "选择会议纪要或学习笔记及输出语言。可将全文或选中文字分享到未发送的新会话草稿。",
+      "help.translation": "翻译与延迟诊断",
+      "help.translationText": "选好译文语言后，正式转写完成的片段会陆续翻译。录音前可打开「延迟诊断」查看本次耗时。计时从工作台收到音频开始。",
+      "help.privacy": "保存位置和隐私",
+      "help.privacyText": "音频在本机转写并保存在 Harness 数据目录下。在工作台历史中可查看保存位置。启用翻译、整理或报告时，转写文字会交给界面显示的模型。",
+      "help.troubleshoot": "录不到声音怎么办",
+      "help.troubleshootText": "检查声音来源和系统权限。戴耳机录视频时选择「电脑声音」。如果切换了输出设备，先在历史确认已保存内容，再重新录制。",
       "system.requesting": "正在请求系统音频权限…",
       "system.source": "声音来源",
       "system.microphone": "麦克风",
@@ -117,6 +142,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "system.unsupported": "电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。",
       "system.unverified": "电脑声音组件校验失败，请重新安装。",
       "system.deviceChanged": "输出设备已变化，录音已停止。已采集的音频保留。",
+      "system.noSamples": "电脑声音采集已中断。已收到 {seconds} 秒音频。",
       "system.limit": "电脑声音录制已达到 60 分钟上限。",
       "system.failed": "电脑声音录制失败或被中断。请检查系统音频权限和输出设备。",
 
@@ -319,6 +345,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'record.mic': '录麦克风',
       'record.system': '录电脑声音',
       'record.active': '正在录制{source}',
+      'record.waiting': '正在等待{source}输入',
+      'record.quiet': '正在录制{source} · 暂无明显声音',
+      'record.noFrames': '音频输入中断。已采集的内容会保留。',
+      'latency.title': '延迟诊断',
+      'latency.enable': '测量工作台录音延迟',
+      'latency.hint': '从工作台收到音频算起。字幕从片段首个有声采样块计时，转写和译文从最后一个有声采样块计时。数据只在本次界面显示。',
+      'latency.partial': '首条临时字幕',
+      'latency.final': '正式转写',
+      'latency.translation': '首段译文',
+      'latency.value': '{label} · {n} 个样本 · 中位数 {p50} 毫秒 · P95 {p95} 毫秒',
+      'latency.empty': '{label} · 暂无样本',
       'record.start': '准备录音',
       'history.play': '播放',
       'history.pause': '暂停',
@@ -455,6 +492,27 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "help.title": "How to use Voice Notes",
+      "ui.language": "Interface language",
+      "ui.auto": "Follow Harness",
+      "help.microphone": "Record yourself",
+      "help.microphoneText": "Select Microphone, start recording and allow microphone access. The chat microphone inserts dictation into your draft.",
+      "help.system": "Record playback through headphones",
+      "help.systemText": "Select Computer audio, start recording and confirm. It captures playback, including notifications. Requires macOS 14.2+ on Apple Silicon or Windows x64.",
+      "help.import": "Transcribe an existing recording",
+      "help.importText": "Select Import audio and choose a local file. First use requires downloading the speech model. Files are limited to 128 MiB and two hours.",
+      "help.meeting": "Multi-speaker meetings",
+      "help.meetingText": "Enable Multi-speaker meeting before recording or importing, or identify speakers from history. When it finishes, rename speakers or reassign individual segments.",
+      "help.history": "Playback, search and export",
+      "help.historyText": "Search history for recordings or transcript text, select a timestamp to listen, or correct the transcript. Export TXT from the recording’s action menu.",
+      "help.report": "Reports and sharing",
+      "help.reportText": "Choose Meeting Notes or Learning Notes and an output language. Share the full transcript or selected text to an unsent draft in a new chat.",
+      "help.translation": "Translation and latency diagnostics",
+      "help.translationText": "Choose a target language to translate each finalized segment. Enable Latency diagnostics before recording to see timings for that recording. Timing starts when audio reaches the studio.",
+      "help.privacy": "Storage and privacy",
+      "help.privacyText": "Audio is transcribed and archived locally under the Harness data directory. The archive path is shown in History. Translation, editing and reports send transcript text to the model shown in the studio.",
+      "help.troubleshoot": "Troubleshooting audio",
+      "help.troubleshootText": "Check your audio source and system permissions. Choose Computer audio when recording headphone playback. If you switch output devices, check the saved recording in History and start a new one.",
       "system.requesting": "Requesting system audio permission…",
       "system.source": "Audio source",
       "system.microphone": "Microphone",
@@ -466,6 +524,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "system.unsupported": "Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.",
       "system.unverified": "Computer audio integrity check failed. Reinstall the package.",
       "system.deviceChanged": "Output device changed. Recording stopped; captured audio is preserved.",
+      "system.noSamples": "Computer audio stopped receiving samples. Received {seconds} seconds of audio.",
       "system.limit": "Computer audio reached its 60-minute limit.",
       "system.failed": "Computer audio failed or was interrupted. Check system audio permission and output device.",
 
@@ -668,6 +727,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'record.mic': 'Record microphone',
       'record.system': 'Record computer audio',
       'record.active': 'Recording {source}',
+      'record.waiting': 'Waiting for {source} input',
+      'record.quiet': 'Recording {source} · Low audio level',
+      'record.noFrames': 'Audio input stopped. Captured content will be kept.',
+      'latency.title': 'Latency diagnostics',
+      'latency.enable': 'Measure studio recording latency',
+      'latency.hint': 'Timing starts when audio reaches the studio. The first caption uses the first audible buffer; the transcript and translation use the last audible buffer. Results are shown for this session only.',
+      'latency.partial': 'First interim caption',
+      'latency.final': 'Final transcript',
+      'latency.translation': 'First translation',
+      'latency.value': '{label} · n={n} · median {p50} ms · P95 {p95} ms',
+      'latency.empty': '{label} · No samples',
       'record.start': 'Ready to record',
       'history.play': 'Play',
       'history.pause': 'Pause',
@@ -868,7 +938,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 .vls-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 .vls-title { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
 .vls-sub { margin: 5px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary); }
-.vls-head-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.vls-help { box-sizing: border-box; width: min(600px, calc(100% - 28px)); max-height: 85vh; overflow: auto; padding: 18px; border-radius: 12px; border: 1px solid var(--dsw-alias-border-l1, #888); background: var(--dsw-alias-bg-layer-1, #fff); color: var(--dsw-alias-label-primary, #111); }
+.vls-help::backdrop { background: #0007; }
+.vls-help header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vls-help h3 { font-size: 14px; margin: 12px 0 4px; }
+.vls-help p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.vls-help details { border-top: 1px solid var(--dsw-alias-border-l1, #ccc); padding: 8px 0; }
+.vls-help summary { cursor: pointer; font-weight: 600; }
+.vls-help details p { margin: 6px 0 0; }
+.vls-head-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
 .vls-card { border: 1px solid var(--dsw-alias-border-l1); border-radius: 16px; background: var(--dsw-alias-bg-layer-1); padding: 16px 16px 14px; }
 .vls-rec { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .vls-mic { gap: 8px; display: inline-flex; flex: none; align-items: center; justify-content: center; min-height: 44px; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--dsw-alias-button-info-fill, #3458ce); font: inherit; font-weight: 600; text-align: left; color: #fff; cursor: pointer; box-shadow: 0 6px 18px -8px rgba(0,0,0,.35); transition: background .15s ease, transform .12s ease; }
@@ -1048,6 +1126,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     const initialState = {
       phase: 'idle',
       surface: 'composer',
+      uiLanguage: UI_LANGUAGES.includes(prefs.uiLanguage) ? prefs.uiLanguage : 'auto',
       archiveError: '',
       lastRecording: null,
       historyVersion: 0,
@@ -1080,6 +1159,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       editing: false,
       pendingSegments: 0,
       captureWarning: '',
+      captureSignal: 'waiting',
+      measureLatency: false,
+      latency: null,
       retrySaving: false,
       status: null,
       statusError: '',
@@ -1139,7 +1221,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     /** Locale fallback for slots that do not inject `t` (the main panel). */
     function translate(key, vars) {
-      let value = localeBound ? localeBound(key) : undefined;
+      const language = store.get().uiLanguage;
+      const dictionary = language === 'en' ? EN : language === 'zh' ? ZH : null;
+      let value = dictionary ? dictionary[key] : localeBound?.(key);
       if (!value || value === key) value = ZH[key] || EN[key] || key;
       if (vars) {
         for (const [name, replacement] of Object.entries(vars)) {
@@ -1163,6 +1247,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         editError: '',
         pendingSegments: 0,
         captureWarning: '',
+        captureSignal: 'waiting',
+        latency: null,
         retrySaving: false,
         archiveStage: '',
         transcribingSegments: 0,
@@ -1852,7 +1938,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         async stopNative() {
           if (!capture.stopping) capture.stopping = request(`/system-audio/${session.id}`, { method: 'DELETE' });
           const result = await capture.stopping;
-          if (result.code) { engine.run && (engine.run.interrupted = true); store.set({ captureWarning: computerAudioMessage(result.code, result.seconds) }); }
+          if (result.code && engine.capture === capture && engine.run) {
+            engine.run.interrupted = true;
+            store.set({ captureWarning: computerAudioMessage(result.code, result.seconds) });
+          }
           await capture.reading;
         },
         async close() {
@@ -1882,10 +1971,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             } catch { failed = !controller.signal.aborted; }
             finally {
               if (generation === engine.generation && store.get().phase === 'recording') {
-                const status = await request(`/system-audio/${session.id}`, { method: 'GET' }).catch(() => ({ code: 'captureFailed' }));
-                if (failed || status.code) store.set({ captureWarning: computerAudioMessage(status.code, status.seconds) });
+                const status = await request(`/system-audio/${session.id}`, { method: 'GET', timeout: 3000 })
+                  .catch(() => ({ code: 'captureFailed' }));
                 // Schedule after this reader settles; finish waits for it when flushing.
-                queueMicrotask(() => void finish(failed || status.code ? 'interrupted' : 'stop'));
+                queueMicrotask(() => {
+                  if (generation !== engine.generation || store.get().phase !== 'recording') return;
+                  const interrupted = failed || status.active || Boolean(status.code);
+                  if (interrupted) store.set({ captureWarning: computerAudioMessage(status.code, status.seconds) });
+                  void finish(interrupted ? 'interrupted' : 'stop');
+                });
               }
             }
           })();
@@ -1926,7 +2020,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function ingestSamples(input, generation) {
-      if (generation !== engine.generation) return;
+      if (generation !== engine.generation || !input.length) return;
       const phase = store.get().phase;
       if (phase !== 'recording' && phase !== 'finishing') return;
       const segment = engine.segment;
@@ -1936,9 +2030,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       segment.samples.push(copy);
       segment.count += input.length;
       engine.pcmSamples += input.length;
+      const run = engine.run;
       const now = Date.now();
-      if (phase !== 'recording') return;
+      const receivedAt = performance.now();
+      run.lastFrameAt = receivedAt;
       const rate = engine.capture.audio.sampleRate;
+      let sum = 0;
+      for (let index = 0; index < input.length; index += 1) sum += input[index] * input[index];
+      const rms = Math.sqrt(sum / input.length);
+      if (rms >= VOICE_RMS) {
+        run.lastSignalAt = receivedAt;
+        if (run.latency) {
+          segment.firstSignalAt ??= receivedAt;
+          segment.lastSignalAt = receivedAt;
+        }
+        engine.hasSpeech = true;
+        engine.lastVoiceAt = now;
+      }
+      if (phase !== 'recording') return;
       if (segment.count >= rate * SEGMENT_SECONDS) {
         finalizeSegment(generation, engine.run);
         return;
@@ -1950,14 +2059,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       ) {
         void sendPartial(generation);
       }
-      let sum = 0;
-      for (let index = 0; index < input.length; index += 1) sum += input[index] * input[index];
-      const rms = Math.sqrt(sum / input.length);
       engine.level = engine.level * 0.72 + rms * 0.28;
-      if (rms >= VOICE_RMS) {
-        engine.hasSpeech = true;
-        engine.lastVoiceAt = now;
-      }
       if (now - engine.lastLevelUi >= 90) {
         engine.lastLevelUi = now;
         store.set({ level: Math.min(1, Math.sqrt(engine.level) * 3.2) });
@@ -2009,7 +2111,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const timer = setInterval(() => {
         if (generation !== engine.generation || store.get().phase !== 'recording') return;
         const now = Date.now();
-        store.set({ elapsed: Math.max(0, (now - engine.startedAt) / 1000) });
+        const clock = performance.now();
+        if (clock - (run.lastFrameAt ?? run.captureStartedAt) >= CAPTURE_TIMEOUT_MS) {
+          store.set({ captureWarning: translate('record.noFrames'), level: 0 });
+          void finish('interrupted');
+          return;
+        }
+        const captureSignal = run.lastFrameAt === undefined ? 'waiting'
+          : clock - (run.lastSignalAt ?? -Infinity) >= QUIET_MS ? 'quiet' : 'active';
+        store.set({ elapsed: Math.max(0, (now - engine.startedAt) / 1000), captureSignal });
         const segment = engine.segment;
         const rate = engine.capture.audio.sampleRate;
         const openSeconds = segment.count / rate;
@@ -2027,12 +2137,25 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       engine.timers.push(timer);
     }
 
+    function recordLatency(run, kind, start) {
+      if (!run.latency || start === undefined || engine.run !== run) return;
+      const samples = run.latency[kind];
+      if (samples.length >= MAX_LATENCY_SAMPLES) return;
+      samples.push(Math.round(performance.now() - start));
+      const sorted = [...samples].sort((a, b) => a - b);
+      const n = sorted.length;
+      const p50 = Math.round((sorted[Math.floor((n - 1) / 2)] + sorted[Math.floor(n / 2)]) / 2);
+      const p95 = sorted[Math.ceil(n * 0.95) - 1];
+      store.set((state) => ({ ...state, latency: { ...state.latency, [kind]: { n, p50, p95 } } }));
+    }
+
     async function sendPartial(generation) {
       if (engine.partialBusy || generation !== engine.generation) return;
       const segment = engine.segment;
       const capture = engine.capture;
       if (!segment || !capture || segment.count < capture.audio.sampleRate * MIN_SECONDS) return;
       const segId = segment.id;
+      const firstSignalAt = segment.firstSignalAt;
       engine.partialBusy = true;
       engine.lastPartialAt = Date.now();
       const controller = new AbortController();
@@ -2050,11 +2173,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           store.get().phase === 'recording'
         ) {
           store.set({ partialText: text });
+          if (text && !segment.captionMeasured && firstSignalAt !== undefined) {
+            segment.captionMeasured = true;
+            recordLatency(engine.run, 'partial', firstSignalAt);
+          }
         }
       } catch (error) {
       } finally {
         clearTimeout(timer);
-        engine.partialBusy = false;
+        if (generation === engine.generation) engine.partialBusy = false;
       }
     }
 
@@ -2092,7 +2219,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           if (generation !== engine.generation || !text) return;
           if (!run.id) run.localTexts.set(snapshot.id, text);
           store.set({ finalText: joinText(store.get().finalText, text) });
-          if (store.get().translate) queueTranslation(text, generation, run);
+          recordLatency(run, 'final', segment.lastSignalAt);
+          if (store.get().translate) queueTranslation(text, generation, run, false, segment.lastSignalAt);
         } catch (error) {
           if (generation !== engine.generation) return;
           if (!run.id) run.segmentFailures.set(snapshot.id, snapshot);
@@ -2133,7 +2261,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       if (changed && state.editMode) void generateEditedText(text, generation, run);
     }
 
-    function queueTranslation(text, generation, run, replace = false) {
+    function queueTranslation(text, generation, run, replace = false, startedAt) {
       const target = store.get().targetLanguage;
       const revision = run.translationRevision;
       if (!shouldTranslate(text, target)) return Promise.resolve();
@@ -2144,14 +2272,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (visible()) store.set({ translating: true, translateError: '' });
         if (replace) run.translated = '';
         try {
-          for (const chunk of splitText(text)) {
+          for (const [index, chunk] of splitText(text).entries()) {
             if (!currentTarget()) return;
             const body = await request('/translate', {
               json: { text: chunk, target, model: run.model },
             });
             if (!currentTarget()) return;
             run.translated = joinText(run.translated, body.text);
-            if (visible()) store.set({ translationText: run.translated, translationLabel: targetLabel(target) });
+            if (visible()) {
+              store.set({ translationText: run.translated, translationLabel: targetLabel(target) });
+              if (index === 0 && body.text) recordLatency(run, 'translation', startedAt);
+            }
           }
           await patchArchive(run, { translation: run.translated });
         } catch (error) {
@@ -2362,6 +2493,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           language,
           model,
           sampleRate: capture.audio.sampleRate,
+          latency: captureOptions.surface === 'studio' && captureOptions.measureLatency
+            ? { partial: [], final: [], translation: [] } : null,
           audioQueue: [],
           audioSequence: 0,
           segmentWrites: new Set(),
@@ -2377,6 +2510,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         engine.segment = newSegment();
         installProcessor(capture, generation);
         engine.startedAt = Date.now();
+        run.captureStartedAt = performance.now();
         if (capture.recorder) {
           capture.recorder.ondataavailable = ({ data }) => {
             if (!data?.size) return;
@@ -2399,11 +2533,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           }
         }
         for (const track of capture.stream.getTracks()) {
-          track.addEventListener('ended', () => {
+          const onEnded = () => {
             if (generation !== engine.generation || store.get().phase !== 'recording') return;
             store.set({ captureWarning: translate('archive.captureInterrupted') });
             void finish('interrupted');
-          }, { once: true });
+          };
+          track.addEventListener('ended', onEnded, { once: true });
+          if (track.readyState === 'ended') queueMicrotask(onEnded);
         }
         store.set((current) => ({
           ...current,
@@ -2906,7 +3042,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function VoiceBar(props) {
       const state = useStore();
-      const t = props.t;
+      const t = state.uiLanguage === 'auto' ? props.t : translate;
       const active =
         state.surface === 'composer' &&
         (state.phase === 'requesting' ||
@@ -2937,7 +3073,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
       React.useEffect(() => {
         const onKey = (event) => {
-          if (event.key !== 'Escape') return;
+          if (event.key !== 'Escape' || event.target?.closest?.('.vls-help[open]')) return;
           if (
             store.get().surface === 'composer' &&
             (store.get().phase === 'recording' || store.get().phase === 'requesting')
@@ -4601,6 +4737,31 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       );
     }
 
+    function StudioHelp({ t }) {
+      const dialog = React.useRef(null);
+      const trigger = React.useRef(null);
+      return h(React.Fragment, null,
+        h('button', { type: 'button', className: 'vl-btn', ref: trigger, 'aria-haspopup': 'dialog',
+          onClick: () => dialog.current?.showModal() }, t('help.title')),
+        h('dialog', { className: 'vls-help', ref: dialog, 'aria-label': t('help.title'),
+          onClose: () => trigger.current?.focus() },
+          h('header', null,
+            h('h2', { className: 'vls-title2' }, t('help.title')),
+            h('button', { type: 'button', className: 'vl-btn', autoFocus: true,
+              onClick: () => dialog.current?.close() }, t('studio.close')),
+          ),
+          ...['microphone', 'system', 'import'].map((topic) => h('section', { key: topic },
+            h('h3', null, t(`help.${topic}`)),
+            h('p', null, t(`help.${topic}Text`)),
+          )),
+          ...['meeting', 'history', 'report', 'translation', 'privacy', 'troubleshoot'].map((topic) => h('details', { key: topic },
+            h('summary', null, t(`help.${topic}`)),
+            h('p', null, t(`help.${topic}Text`)),
+          )),
+        ),
+      );
+    }
+
     function Studio(props) {
       const t = translate;
       const state = useStore();
@@ -4808,7 +4969,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const recordAction = t(recording ? 'studio.stop' : requesting ? 'studio.cancel' :
         studioSource === 'system' ? 'record.system' : 'record.mic');
       const statusText = recording
-        ? t('record.active', { source: sourceName })
+        ? t(`record.${state.captureSignal}`, { source: sourceName })
         : requesting
           ? t(studioSource === 'system' ? 'system.requesting' : 'phase.requesting')
           : finishing
@@ -5124,6 +5285,20 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             h(
               'div',
               { className: 'vls-head-actions' },
+              h('select', { className: 'vl-select', value: state.uiLanguage,
+                title: t('ui.language'), 'aria-label': t('ui.language'),
+                onChange: (event) => {
+                  const uiLanguage = event.target.value;
+                  if (!UI_LANGUAGES.includes(uiLanguage)) return;
+                  store.set({ uiLanguage });
+                  savePrefs({ uiLanguage });
+                },
+              },
+                h('option', { value: 'auto' }, t('ui.auto')),
+                h('option', { value: 'zh', lang: 'zh-CN' }, '简体中文'),
+                h('option', { value: 'en', lang: 'en' }, 'English'),
+              ),
+              h(StudioHelp, { t }),
               modelText ? h('span', { className: 'vls-sub' }, modelText) : null,
               h('input', {
                 ref: importPicker, type: 'file', hidden: true, accept: '.mp3,.wav,.m4a,.flac,.ogg,.opus,.webm',
@@ -5245,6 +5420,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               h('p', { className: 'vl-note' }, modelDisclosure(state, t)),
             ),
             h(DictationPreferences, { state, t }),
+            h('details', null,
+              h('summary', { className: 'vls-mini' }, t('latency.title')),
+              h('label', { className: 'vls-lang' },
+                h('input', { type: 'checkbox', checked: state.measureLatency,
+                  disabled: recording || requesting || finishing,
+                  onChange: (event) => store.set({ measureLatency: event.target.checked }),
+                }),
+                t('latency.enable'),
+              ),
+              h('p', { className: 'vl-note' }, t('latency.hint')),
+              (state.latency || engine.run?.latency) ? h('ul', { className: 'vl-note' },
+                ...['partial', 'final', 'translation'].map((kind) => {
+                  const stats = state.latency?.[kind];
+                  return h('li', { key: kind }, t(stats ? 'latency.value' : 'latency.empty',
+                    { label: t(`latency.${kind}`), ...stats }));
+                }),
+              ) : null,
+            ),
             state.importNotice ? h('p', { className: 'vl-note', role: 'status' }, state.importNotice) : null,
             state.importError ? h('p', { className: 'vls-error', role: 'alert' }, state.importError) : null,
             body,
@@ -5414,13 +5607,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     function LiveOverlay(props) {
       const state = useStore();
       if (state.surface === 'studio') return null;
+      const panelProps = state.uiLanguage === 'auto' ? props : { ...props, t: translate };
       return h(
         React.Fragment,
         null,
-        h(LivePanel, props),
-        h(ResultPanel, props),
-        h(SetupPanel, props),
-        h(ErrorPanel, props),
+        h(LivePanel, panelProps),
+        h(ResultPanel, panelProps),
+        h(SetupPanel, panelProps),
+        h(ErrorPanel, panelProps),
       );
     }
 
@@ -5474,7 +5668,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               name: 'sidebar.panellist',
               id: 'voice-live',
               order: 26,
-              label: () => ctx.locale.bind(NS)('studio.title'),
+              label: () => translate('studio.title'),
             },
             PanelIcon,
           ),

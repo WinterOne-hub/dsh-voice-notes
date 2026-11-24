@@ -193,7 +193,7 @@ test('failed segment can be retried and concurrent derived updates preserve the 
 async function bootClient(t, call, preferences = {}, runtime = {}) {
   const rawSource = await readFile(new URL('../client.js', import.meta.url), 'utf8');
   const source = rawSource.replace(/^    return \{\r?\n      inject: \['slots',/m, (registration) =>
-    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, MeetingInterpretation, translate };\n' + registration);
+    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, sendPartial, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, MeetingInterpretation, translate };\n' + registration);
   assert.ok(source !== rawSource, 'The test harness must expose the client factory helpers');
   const methods = { connect() {}, disconnect() {} };
   const stream = { getTracks: () => [] };
@@ -232,7 +232,8 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   const body = new Element();
   const sandbox = {
     AbortController, AbortSignal, Blob, DataView, Range: { START_TO_START: 0, END_TO_END: 2 }, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
-    setInterval, clearInterval, setTimeout, clearTimeout, queueMicrotask,
+    setInterval: runtime.setInterval ?? setInterval, clearInterval: runtime.clearInterval ?? clearInterval,
+    setTimeout, clearTimeout, queueMicrotask, performance: runtime.performance ?? performance,
     document: { body, createElement: () => new Element() },
     navigator: { mediaDevices: { getUserMedia: async () => { if (runtime.forbidMicrophone) throw new Error('Microphone must remain off'); return runtime.microphone ?? stream; } } },
     window: {
@@ -253,7 +254,7 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   };
   runInNewContext(source, sandbox);
   t.after(() => {
-    sandbox.voice.engine.timers.forEach(clearInterval);
+    sandbox.voice.engine.timers.forEach(sandbox.clearInterval);
     clearTimeout(sandbox.voice.engine.noticeTimer);
   });
   return { ...sandbox.voice, body };
@@ -269,6 +270,89 @@ function waitFor(store, predicate) {
     });
   });
 }
+
+test('quiet audio keeps recording while missing frames stop and preserve the archive', { timeout: 3000 }, async (t) => {
+  const { call, dataRoot } = await fixture(t);
+  let now = 0, tick;
+  const { engine, store, begin, ingestSamples } = await bootClient(t, call, {}, {
+    performance: { now: () => now },
+    setInterval(fn) { tick = fn; return 1; },
+    clearInterval() { tick = undefined; },
+  });
+  await begin(null, undefined, false, 'studio');
+  const { id } = engine.run;
+  const input = (signal) => ingestSamples(new Float32Array(3200).fill(signal), engine.generation);
+  tick();
+  assert.equal(store.get().captureSignal, 'waiting');
+  input(0.1);
+  tick();
+  assert.equal(store.get().captureSignal, 'active');
+  for (now = 2000; now <= 14_000; now += 2000) {
+    input(0);
+    tick();
+    assert.equal(store.get().captureSignal, 'quiet');
+    assert.equal(store.get().phase, 'recording');
+  }
+  now = 24_000;
+  tick();
+  await waitFor(store, (s) => s.phase === 'result');
+  assert.match(store.get().captureWarning, /音频输入中断/);
+  assert.equal(store.get().latency, null);
+  const archive = createRecordingStore(join(dataRoot, 'recordings'));
+  const saved = await archive.get(id);
+  assert.equal(saved.status, 'interrupted');
+  assert.ok(saved.size > 0);
+  assert.equal(saved.text, 'Raw model output');
+});
+
+test('latency diagnostics summarize visible captions, final text and translation independently', { timeout: 3000 }, async (t) => {
+  const { call, model, state, dataRoot } = await fixture(t);
+  let now = 1000;
+  const prefs = { targetLanguage: 'zh', modelPermission: JSON.stringify([model.provider, model.model]) };
+  const { engine, store, begin, finish, ingestSamples, sendPartial, finalizeSegment } = await bootClient(t, call, prefs, {
+    performance: { now: () => now },
+  });
+  assert.equal(store.get().measureLatency, false);
+  store.set({ measureLatency: true });
+  await begin(null, undefined, false, 'studio');
+  const { run, generation } = engine;
+  const input = new Float32Array(8000).fill(0.1);
+  ingestSamples(input, generation);
+  now = 1250;
+  await sendPartial(generation);
+  now = 1400;
+  await sendPartial(generation);
+
+  for (const [lastSound, final, translation] of [[1500, 2000, 2650], [3000, 3900, 4300]]) {
+    now = lastSound;
+    ingestSamples(input, generation);
+    const speech = Promise.withResolvers();
+    const modelReply = Promise.withResolvers();
+    const modelCalls = state.modelCalls;
+    state.wait = speech.promise;
+    state.waitModel = modelReply.promise;
+    t.after(() => { speech.resolve(); modelReply.resolve(); });
+    finalizeSegment(generation, run);
+    now = final;
+    speech.resolve();
+    await engine.finalChain;
+    while (state.modelCalls === modelCalls) await new Promise((resolve) => setImmediate(resolve));
+    now = translation;
+    modelReply.resolve();
+    await run.translateChain;
+  }
+  await finish('stop');
+  assert.equal(JSON.stringify(store.get().latency), JSON.stringify({
+    partial: { n: 1, p50: 250, p95: 250 },
+    final: { n: 2, p50: 700, p95: 900 },
+    translation: { n: 2, p50: 1225, p95: 1300 },
+  }));
+  const archive = createRecordingStore(join(dataRoot, 'recordings'));
+  assert.equal((await archive.get(run.id)).latency, undefined);
+  await begin(null, undefined, false, 'studio');
+  assert.equal(store.get().latency, null);
+  await finish('stop');
+});
 
 test('client archives the audio and raw text without model editing when a later segment fails', async (t) => {
   const { call, state, dataRoot } = await fixture(t);
@@ -464,6 +548,16 @@ test('model work requires a confirmed model and rejects a fourth concurrent requ
   assert.equal((await call(url, 'POST', { ...source, model })).status, 429);
   gate.resolve();
   assert.deepEqual((await Promise.all(running)).map((response) => response.status), [200, 200, 200]);
+});
+
+test('the guide uses the selected interface language independently of audio language', async (t) => {
+  const { call } = await fixture(t);
+  const { store, translate } = await bootClient(t, call, { uiLanguage: 'en', sourceLanguage: 'zh' });
+  assert.equal(translate('help.title'), 'How to use Voice Notes');
+  assert.equal(store.get().sourceLanguage, 'zh');
+  store.set({ uiLanguage: 'zh' });
+  assert.equal(translate('help.title'), '使用说明');
+  assert.equal(store.get().sourceLanguage, 'zh');
 });
 
 test('private defaults do not carry legacy model consent into new dictation', async (t) => {
@@ -993,7 +1087,7 @@ test('interpretation cancellation and competing replacements preserve the last s
   assert.equal((await call(path)).data.report.id, current.id);
 });
 
-test('computer audio streams odd byte boundaries without opening a microphone, and saves local transcription', { timeout: 4000 }, async (t) => {
+async function checkComputerAudio(t, deviceChanged) {
   const { call, dataRoot, state } = await fixture(t);
   const archive = createRecordingStore(join(dataRoot, 'recordings'));
   const pcm = Buffer.alloc(32000);
@@ -1015,22 +1109,35 @@ test('computer audio streams odd byte boundaries without opening a microphone, a
       if (path.endsWith('/stream')) return { ok: true, body: new ReadableStream({
         start(value) { controller = value; value.enqueue(pcm.subarray(0, 3)); value.enqueue(pcm.subarray(3)); },
       }) };
-      if (options.method === 'DELETE') { controller.close(); return json({ active: false, code: null }); }
-      return json({ active: false, code: null });
+      if (options.method === 'DELETE' && !deviceChanged) controller.close();
+      return json({ active: false, code: deviceChanged ? 'deviceChanged' : null });
     },
   });
   assert.equal(store.get().captureSource, 'microphone');
   store.set({ captureSource: 'system' });
   await begin(null, null, false, 'studio');
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  while (engine.pcmSamples < 16000) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(engine.pcmSamples, 16000); assert.equal(engine.capture.recorder, undefined);
-  await finish('stop');
-  assert.equal(confirmations, 1); assert.equal(store.get().captureWarning, '');
+  if (deviceChanged) {
+    controller.close();
+    await waitFor(store, (s) => s.phase === 'result');
+    assert.match(store.get().captureWarning, /输出设备已变化/);
+  } else {
+    await finish('stop');
+    assert.equal(store.get().captureWarning, '');
+  }
+  assert.equal(confirmations, 1);
   assert.equal(store.get().phase, 'result');
   const recording = await archive.get(id);
-  assert.equal(recording.status, 'complete'); assert.equal(recording.text, 'Raw model output');
+  assert.equal(recording.status, deviceChanged ? 'interrupted' : 'complete');
+  assert.equal(recording.text, 'Raw model output');
   assert.equal(state.modelCalls, 0);
-});
+}
+
+test('computer audio streams odd byte boundaries without opening a microphone', { timeout: 4000 },
+  (t) => checkComputerAudio(t, false));
+test('computer audio device changes stop capture and preserve audio and transcription', { timeout: 4000 },
+  (t) => checkComputerAudio(t, true));
 
 test('learning notes honor language and require selected-model confirmation for both partial and merged reports', async (t) => {
   const { call, model, state } = await fixture(t);
