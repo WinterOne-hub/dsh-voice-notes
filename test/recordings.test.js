@@ -550,6 +550,16 @@ test('model work requires a confirmed model and rejects a fourth concurrent requ
   assert.deepEqual((await Promise.all(running)).map((response) => response.status), [200, 200, 200]);
 });
 
+test('the guide uses the selected interface language independently of audio language', async (t) => {
+  const { call } = await fixture(t);
+  const { store, translate } = await bootClient(t, call, { uiLanguage: 'en', sourceLanguage: 'zh' });
+  assert.equal(translate('help.title'), 'How to use Voice Notes');
+  assert.equal(store.get().sourceLanguage, 'zh');
+  store.set({ uiLanguage: 'zh' });
+  assert.equal(translate('help.title'), '使用说明');
+  assert.equal(store.get().sourceLanguage, 'zh');
+});
+
 test('private defaults do not carry legacy model consent into new dictation', async (t) => {
   const { call } = await fixture(t);
   const { store } = await bootClient(t, call, { targetLanguage: 'zh', editMode: true, reportMode: true });

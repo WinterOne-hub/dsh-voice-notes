@@ -22,7 +22,7 @@ macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、�
 
 ## 使用
 
-点击工作台标题旁的「使用说明」查看操作步骤，录音期间也可打开。
+点击工作台标题旁的「使用说明」查看操作步骤，录音期间也可打开。可选择简体中文、English 或跟随 Harness。
 
 - **听写：** 点击聊天输入框的麦克风。默认将文字插入草稿；可在偏好中启用历史保存和窗口内快捷键。
 - **录音和导入：** 在侧栏工作台录音，或导入 MP3、WAV、M4A、FLAC、OGG、Opus、WebM（最多 128 MiB、2 小时）。首次转写需下载 SenseVoice 模型。
@@ -102,7 +102,7 @@ The studio checks GitHub for updates. Use **Update now** to download, verify and
 
 ### Use
 
-Select **How to use Voice Notes** in the studio to open the guide, including while recording.
+Select **How to use Voice Notes** in the studio to open the guide, including while recording. Select Simplified Chinese, English, or Follow Harness as the interface language.
 
 - Dictate in chat or record from the Voice Notes sidebar. Chat dictation inserts text into the draft by default.
 - Import MP3, WAV, M4A, FLAC, OGG, Opus or WebM, up to 128 MiB and two hours. Download the SenseVoice model before the first transcription.

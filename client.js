@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       ['ja', '日本語'],
       ['ko', '한국어'],
     ];
+    const UI_LANGUAGES = ['auto', 'zh', 'en'];
     const TARGETS = [
       ['off', 'translate.off'],
       ['en', 'English'],
@@ -110,6 +111,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     const ZH = {
       "help.title": "使用说明",
+      "ui.language": "界面语言",
+      "ui.auto": "跟随 Harness",
       "help.microphone": "录下自己的声音",
       "help.microphoneText": "选择「麦克风」，点击录音并允许麦克风访问。聊天输入框的麦克风可将听写插入草稿。",
       "help.system": "戴耳机录下视频声音",
@@ -490,6 +493,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     const EN = {
       "help.title": "How to use Voice Notes",
+      "ui.language": "Interface language",
+      "ui.auto": "Follow Harness",
       "help.microphone": "Record yourself",
       "help.microphoneText": "Select Microphone, start recording and allow microphone access. The chat microphone inserts dictation into your draft.",
       "help.system": "Record playback through headphones",
@@ -1121,6 +1126,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     const initialState = {
       phase: 'idle',
       surface: 'composer',
+      uiLanguage: UI_LANGUAGES.includes(prefs.uiLanguage) ? prefs.uiLanguage : 'auto',
       archiveError: '',
       lastRecording: null,
       historyVersion: 0,
@@ -1215,7 +1221,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     /** Locale fallback for slots that do not inject `t` (the main panel). */
     function translate(key, vars) {
-      let value = localeBound ? localeBound(key) : undefined;
+      const language = store.get().uiLanguage;
+      const dictionary = language === 'en' ? EN : language === 'zh' ? ZH : null;
+      let value = dictionary ? dictionary[key] : localeBound?.(key);
       if (!value || value === key) value = ZH[key] || EN[key] || key;
       if (vars) {
         for (const [name, replacement] of Object.entries(vars)) {
@@ -3034,7 +3042,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function VoiceBar(props) {
       const state = useStore();
-      const t = props.t;
+      const t = state.uiLanguage === 'auto' ? props.t : translate;
       const active =
         state.surface === 'composer' &&
         (state.phase === 'requesting' ||
@@ -3065,7 +3073,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
       React.useEffect(() => {
         const onKey = (event) => {
-          if (event.key !== 'Escape') return;
+          if (event.key !== 'Escape' || event.target?.closest?.('.vls-help[open]')) return;
           if (
             store.get().surface === 'composer' &&
             (store.get().phase === 'recording' || store.get().phase === 'requesting')
@@ -5277,6 +5285,19 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             h(
               'div',
               { className: 'vls-head-actions' },
+              h('select', { className: 'vl-select', value: state.uiLanguage,
+                title: t('ui.language'), 'aria-label': t('ui.language'),
+                onChange: (event) => {
+                  const uiLanguage = event.target.value;
+                  if (!UI_LANGUAGES.includes(uiLanguage)) return;
+                  store.set({ uiLanguage });
+                  savePrefs({ uiLanguage });
+                },
+              },
+                h('option', { value: 'auto' }, t('ui.auto')),
+                h('option', { value: 'zh', lang: 'zh-CN' }, '简体中文'),
+                h('option', { value: 'en', lang: 'en' }, 'English'),
+              ),
               h(StudioHelp, { t }),
               modelText ? h('span', { className: 'vls-sub' }, modelText) : null,
               h('input', {
@@ -5586,13 +5607,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     function LiveOverlay(props) {
       const state = useStore();
       if (state.surface === 'studio') return null;
+      const panelProps = state.uiLanguage === 'auto' ? props : { ...props, t: translate };
       return h(
         React.Fragment,
         null,
-        h(LivePanel, props),
-        h(ResultPanel, props),
-        h(SetupPanel, props),
-        h(ErrorPanel, props),
+        h(LivePanel, panelProps),
+        h(ResultPanel, panelProps),
+        h(SetupPanel, panelProps),
+        h(ErrorPanel, panelProps),
       );
     }
 
@@ -5646,7 +5668,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               name: 'sidebar.panellist',
               id: 'voice-live',
               order: 26,
-              label: () => ctx.locale.bind(NS)('studio.title'),
+              label: () => translate('studio.title'),
             },
             PanelIcon,
           ),
