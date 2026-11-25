@@ -20,7 +20,7 @@ export function createDesktopCaptions({ getHelper = verifiedCaptionHelper, launc
   function write(session, text) {
     const line = text.replace(/[\p{Cc}\s]+/gu, ' ').trim();
     if (!session.child.stdin.destroyed && session.child.stdin.writableLength < 4096) {
-      session.child.stdin.write(Array.from(line).slice(-240).join('') + '\n');
+      session.child.stdin.write(line + '\n');
     }
   }
 

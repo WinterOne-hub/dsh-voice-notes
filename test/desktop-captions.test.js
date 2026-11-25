@@ -14,7 +14,7 @@ function streamResponse() {
   return response;
 }
 
-test('caption session forwards plain bounded text and closes its helper on renderer disconnect', async (t) => {
+test('caption session forwards a complete normalized line and closes its helper on renderer disconnect', async (t) => {
   const child = new EventEmitter();
   child.stdout = new PassThrough();
   child.stdin = new PassThrough();
@@ -41,7 +41,7 @@ test('caption session forwards plain bounded text and closes its helper on rende
   assert.equal(await bridge.open('other', '', streamResponse()), 'busy');
   assert.equal(bridge.update('other', 'unrelated'), false);
   assert.equal(bridge.update('active', 'x'.repeat(400)), true);
-  assert.deepEqual(received, ['简体中文 English\n', 'x'.repeat(240) + '\n']);
+  assert.deepEqual(received, ['简体中文 English\n', 'x'.repeat(400) + '\n']);
   const closed = new Promise((resolve) => child.stdin.once('close', resolve));
   response.destroy();
   await closed;

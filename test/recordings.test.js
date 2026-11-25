@@ -273,11 +273,12 @@ function waitFor(store, predicate) {
   });
 }
 
-test('desktop captions follow the recording preference and close when recording ends', { timeout: 3000 }, async (t) => {
+test('desktop captions show finished sentences in order and close when recording ends', { timeout: 5500 }, async (t) => {
   const { call } = await fixture(t);
   const opened = Promise.withResolvers();
-  const updated = Promise.withResolvers();
   const closed = Promise.withResolvers();
+  const replies = [];
+  const displayed = Array.from({ length: 3 }, () => Promise.withResolvers());
   const { store, mountDesktopCaptions } = await bootClient(t, call, {}, {
     fetch(path, options) {
       assert.equal(path, API + '/desktop-captions');
@@ -289,17 +290,25 @@ test('desktop captions follow the recording preference and close when recording 
         }) };
       }
       assert.equal(options.method, 'PATCH');
-      updated.resolve(input);
+      replies.push({ ...input, at: performance.now() });
+      displayed[replies.length - 1]?.resolve();
       return { ok: true, json: async () => ({ ok: true }) };
     },
   });
   t.after(mountDesktopCaptions());
   assert.equal(store.get().captionMode, 'off');
-  store.set({ phase: 'recording', captionMode: 'translation', partialText: 'Original' });
+  store.set({ phase: 'recording', captionMode: 'original', partialText: '临时字幕。' });
   const first = await opened.promise;
-  assert.equal(first.text, 'Original');
-  store.set({ translate: true, translationText: '译文' });
-  assert.deepEqual(await updated.promise, { id: first.id, text: '译文' });
+  assert.match(first.text, /等待完整字幕/);
+  store.set({ captionOriginal: { text: '第一句。第二句！最后', paused: false } });
+  await displayed[0].promise;
+  assert.equal(replies[0].text, '第一句。');
+  store.set({ partialText: '正在改写的字幕！', captionOriginal: { text: '一句', paused: true } });
+  await displayed[1].promise;
+  await displayed[2].promise;
+  assert.deepEqual(replies.map(({ text }) => text), ['第一句。', '第二句！', '最后一句']);
+  assert.ok(replies.every(({ id }) => id === first.id));
+  assert.ok(replies[1].at - replies[0].at >= 1100);
   store.set({ phase: 'finishing' });
   await closed.promise;
   assert.equal(store.get().captionError, '');

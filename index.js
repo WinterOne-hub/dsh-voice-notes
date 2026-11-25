@@ -1254,8 +1254,8 @@ export async function apply(ctx, config) {
 
   const captions = handler(async (req, res, method) => {
     if (method !== 'POST' && method !== 'PATCH') throw new HttpError(405, '不支持此操作');
-    const { id, text } = await readJson(req, 4096);
-    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id) || typeof text !== 'string' || text.length > 480) {
+    const { id, text } = await readJson(req, 16 * 1024);
+    if (typeof id !== 'string' || !/^[0-9a-f-]{36}$/.test(id) || typeof text !== 'string' || text.length > 2000) {
       throw new HttpError(400, '无效桌面字幕内容');
     }
     if (method === 'POST') {
