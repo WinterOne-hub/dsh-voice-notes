@@ -21,6 +21,20 @@ export async function verifiedHelper(platform = process.platform, arch = process
   const key = `${platform}-${arch}`, files = bundles[key];
   if (platform === 'darwin' && process.platform === 'darwin' && Number(release().split('.').slice(0, 2).join('.')) < 23.2) throw new SystemAudioError('unsupported', 503);
   if (!files) throw new SystemAudioError('unsupported', 503);
+  return verifyNativeBundle(directory, key, files);
+}
+
+export async function verifiedCaptionHelper(platform = process.platform, arch = process.arch, directory = root) {
+  const key = `${platform}-${arch}`;
+  const executable = {
+    'darwin-arm64': 'darwin-arm64/voice-captions',
+    'win32-x64': 'win32-x64/voice-captions.exe',
+  }[key];
+  if (!executable) throw new SystemAudioError('unsupported', 503);
+  return verifyNativeBundle(directory, `${key}-captions`, [executable]);
+}
+
+async function verifyNativeBundle(directory, key, files) {
   try {
     const base = await lstat(directory);
     if (base.isSymbolicLink() || !base.isDirectory()) throw new Error('Unsafe native root');
@@ -43,7 +57,7 @@ export async function verifiedHelper(platform = process.platform, arch = process
 }
 
 // No model credentials, preload flags or arbitrary executable options reach the helper.
-function helperEnvironment() {
+export function helperEnvironment() {
   return Object.fromEntries(['HOME', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'WINDIR', 'LANG', 'LC_ALL']
     .filter((key) => process.env[key] !== undefined).map((key) => [key, process.env[key]]));
 }
@@ -91,7 +105,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
   const snapshot = (session) => ({ id: session.id, recordingId: session.recording.id, active: session.active,
     code: session.code ?? null, seconds: session.bytes / PCM_BYTES_PER_SECOND });
 
-  async function start({ language = 'auto', confirmed, reportKind }, signal) {
+  async function start({ language = 'auto', confirmed, reportKind, recordingScene }, signal) {
     if (confirmed !== true) throw new SystemAudioError('confirmation', 400);
     if (busy()) throw new SystemAudioError('busy');
     starting = true;
@@ -100,7 +114,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
       signal?.throwIfAborted();
       const executable = await getHelper(platform, arch);
       signal?.throwIfAborted();
-      const recording = await recordings.save({ text: '', live: true, mimeType: 'audio/wav', source: 'system', systemPcm: true, language, reportKind });
+      const recording = await recordings.save({ text: '', live: true, mimeType: 'audio/wav', source: 'system', systemPcm: true, language, reportKind, recordingScene });
       const child = launch(executable, args, { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: helperEnvironment() });
       let resolveReady, rejectReady;
       const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });

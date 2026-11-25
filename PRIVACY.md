@@ -14,6 +14,8 @@ v0.0.4 的「会议体检」和「表达解读（潜台词）」仅在逐次确�
 
 可在历史逐条删除录音。卸载保留录音、模型和更新缓存。导出文件、备份和已发出的聊天内容在各自位置管理。
 
+桌面字幕默认关闭。启用后，最近的字幕文字通过本机 Harness 传给原生窗口组件，仅供显示。关闭时清除窗口中的文字。
+
 工作台的延迟诊断需手动启用。计时数据只保存在界面内存中，下一次录音时清除。
 
 电脑声音录制只在选择该来源并逐次确认开始后启动。采集系统播放混音，可能包括其他应用与通知；不采集屏幕、不打开麦克风。macOS 还需系统音频权限。组件不枚举或保存播放应用名称、设备标识，不读取模型配置或访问网络。输出设备变化、断开连接或插件退出时停止，不回退到麦克风。最多录制 60 分钟，PCM 归档按受保护的本机目录权限保存；临时传输队列有大小限制。学习笔记与其他报告共用模型确认流程，原始音频不发送给报告模型。原生文件在启动前检查版本和哈希，清单本身不是数字发行签名。
@@ -25,6 +27,8 @@ Microphone and imported audio are transcribed locally. Studio recordings, import
 Translation, editing and reports send transcript text to the selected model. Sharing creates an unsent Harness draft. Speaker model setup downloads from Hugging Face. Model setup and update checks access their download sources without sending audio, transcript text or personal API credentials.
 
 The archive is unencrypted. Access is restricted by macOS file permissions or Windows ACLs. The API requires an authenticated local Harness Desktop session. Update files are checked before installation. Uninstalling keeps the archive and caches; delete recordings from history.
+
+Desktop captions are off by default. When enabled, the local Harness host passes recent caption text to the native window for display. Closing the window clears its text.
 
 Studio latency diagnostics are opt-in. Timing data stays in the interface's memory and is cleared when a new recording starts.
 

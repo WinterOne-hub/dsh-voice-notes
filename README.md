@@ -2,23 +2,23 @@
 
 DeepSeek Harness 桌面插件，支持本地录音转写、说话人区分、会议纪要和转写检索。适用于 macOS（Apple Silicon）和 Windows x64。
 
-**v0.0.8：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.8)。修复电脑声音录制启动后出现 404 的问题。
+**v0.0.9：** [安装包和更新说明](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.9)。新增桌面字幕和录音场景，优化历史卡片。
 
 [中文](#安装和开发) · [English](#english) · [Releases](https://github.com/WinterOne-hub/dsh-voice-notes/releases)
 
 ## 安装和开发
 
-| 平台 | v0.0.8 安装包 | SHA-256 |
+| 平台 | v0.0.9 安装包 | SHA-256 |
 | --- | --- | --- |
-| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/dsh-voice-notes-0.0.8.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/SHA256SUMS) |
-| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/dsh-voice-notes-0.0.8.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/SHA256SUMS) |
+| macOS（Apple Silicon） | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/dsh-voice-notes-0.0.9.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/SHA256SUMS) |
+| Windows x64 | [下载](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/dsh-voice-notes-0.0.9.tgz) | [SHA256SUMS](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/SHA256SUMS) |
 
-1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.8.tgz -Algorithm SHA256`，与校验文件比对。
+1. 在 macOS 上运行 `shasum -a 256 -c SHA256SUMS`。在 Windows 上运行 `Get-FileHash .\dsh-voice-notes-0.0.9.tgz -Algorithm SHA256`，与校验文件比对。
 2. macOS 和 Windows 使用同一个安装包。在 Harness 的「插件」页添加 `.tgz`，启用后重启。在侧栏打开「语音速记」。若已安装其他语音速记本地包，先卸载旧包。
 
 macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、四人会议转写和历史回放，实体麦克风尚未验证。参见 [Windows 测试记录](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml)。
 
-打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.8。
+打开工作台时会检查更新。找到新版本后，可在界面下载、校验和安装，重启生效。已有更新入口的 v0.0.2 可直接检查更新；更早且没有更新入口的构建需手动安装 v0.0.9。
 
 ## 使用
 
@@ -31,13 +31,26 @@ macOS 测试使用 Harness Desktop 0.2.2-rc.3。Windows x64 已验证安装、�
 
 录音和识别在本机处理。启用翻译、整理或报告时，转写文字交给界面所示模型。录音保存在 `~/.dsh/voice-live/recordings`；可从历史中删除。卸载插件不会删除录音或模型缓存。见 [隐私与安全](PRIVACY.md)。
 
-录音时的临时字幕识别间隔约 1.3 秒。正式转写通常在停顿约 1.4 秒时触发；连续发言约每 28 秒切段。译文在该段正式转写后生成，耗时取决于所用模型和网络。工作台提供[延迟诊断](docs/release-0.0.8.md)，可查看本次录音的字幕、转写和译文耗时。
+录音时的临时字幕识别间隔约 1.3 秒。正式转写通常在停顿约 1.4 秒时触发；连续发言约每 28 秒切段。译文在该段正式转写后生成，耗时取决于所用模型和网络。工作台提供[延迟诊断](docs/release-0.0.9.md)，可查看本次录音的字幕、转写和译文耗时。
+
+## 录音场景
+
+录音场景和声音来源可分别选择。开始录音后，场景随这条录音保存。
+
+- **自动**使用通用分段。电脑声音默认生成学习笔记，麦克风默认生成会议纪要。
+- **多人会议**在录音结束后识别说话人，可提前指定人数。默认生成会议纪要。
+- **课程模式**适合讲座和单人报告，短停顿仍保留在同一段。课程笔记按讲授顺序整理知识点和例子。
+- **自学模式**适合视频、播客和文件导入。电脑声音和导入文件中的全零音频块跳过转写，保留录音和原时间轴。学习笔记包含重点和复习问题。
+
+## 桌面字幕
+
+工作台的「桌面字幕」可选择原文或译文优先。开始录音后打开置顶字幕条，拖动可调整位置，靠近边缘时吸附。点击减号折叠，点击加号恢复。录音结束时自动关闭。
 
 ## 多人会议
 
 v0.0.3 新增。
 
-在工作台勾选「多人会议」，再录音或导入文件。字幕仍在录音时显示；说话人标签在录音结束后生成。已有录音可在历史点「识别说话人」。最长 60 分钟，单条音频最多 128 MiB。首次使用会下载约 38 MiB 的模型。下载失败时可通过工作台导入已下载的 ONNX 文件。
+在工作台选择「多人会议」场景，再录音或导入文件。字幕仍在录音时显示；说话人标签在录音结束后生成。已有录音可在历史点「识别说话人」。最长 60 分钟，单条音频最多 128 MiB。首次使用会下载约 38 MiB 的模型。下载失败时可通过工作台导入已下载的 ONNX 文件。
 
 在「多人转写」中可改名、调整单段归属、回听和导出。报告及新会话草稿会带上时间戳和说话人。已知人数时可直接指定；重叠发言需回听核对。v0.0.4 可选择电脑声音；v0.0.3 需先另行录制或导出。
 
@@ -79,7 +92,7 @@ v0.0.4 的另一项实验功能。在历史卡片打开「表达解读（潜台�
 
 ## English
 
-[Download v0.0.8 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.8). This release fixes an HTTP 404 when recording computer audio.
+[Download v0.0.9 and release notes](https://github.com/WinterOne-hub/dsh-voice-notes/releases/tag/v0.0.9). This release adds desktop captions and recording modes and improves history cards.
 
 ### Computer audio (experimental)
 
@@ -94,11 +107,11 @@ Voice Notes provides local audio transcription, speaker diarization, meeting sum
 
 ### Install
 
-Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/dsh-voice-notes-0.0.8.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.8/dsh-voice-notes-0.0.8.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
+Download the [macOS Apple Silicon package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/dsh-voice-notes-0.0.9.tgz) or the [Windows x64 package](https://github.com/WinterOne-hub/dsh-voice-notes/releases/download/v0.0.9/dsh-voice-notes-0.0.9.tgz). Verify the download against the corresponding SHA-256 file in the table above. Both platforms use the same package. Add the `.tgz` on the **Plugins** page, enable it, and restart Harness.
 
 Tested with Harness Desktop 0.2.2-rc.3 on macOS. Installation, four-speaker transcription, and archive playback were verified on the official Windows x64 build. Physical microphone capture on Windows has yet to be tested. See the [Windows test run](https://github.com/WinterOne-hub/dsh-voice-notes/actions/workflows/windows-host-smoke.yml).
 
-The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.8.
+The studio checks GitHub for updates. Use **Update now** to download, verify and install a newer version, then restart Harness. Use **Check for updates** in v0.0.2 if available; older builds require manual installation of v0.0.9.
 
 ### Use
 
@@ -111,13 +124,26 @@ Select **How to use Voice Notes** in the studio to open the guide, including whi
 
 Audio is processed and stored locally. Optional translation, editing and reports send transcript text to the selected model. Uninstalling leaves the archive and model cache on disk. See [Privacy and Security](PRIVACY.md).
 
-The studio includes [latency diagnostics](docs/release-0.0.8.md) for interim captions, final transcripts and live translation.
+The studio includes [latency diagnostics](docs/release-0.0.9.md) for interim captions, final transcripts and live translation.
+
+### Recording modes
+
+Choose the mode and audio source separately. The mode is saved with the recording.
+
+- **Automatic** uses general segmentation and chooses Meeting Notes for microphone recordings or Learning Notes for computer audio.
+- **Multi-speaker meeting** identifies speakers after recording and defaults to Meeting Notes.
+- **Lecture** keeps short pauses in the same segment. Lecture Notes follow the order of the talk and retain supported examples.
+- **Self-study** is for videos, podcasts and imported audio. Computer audio and imports skip entirely silent blocks during transcription and retain the original audio and timing. Learning Notes include key points and review questions.
+
+### Desktop captions
+
+Choose Original or Prefer translation under Desktop captions. The caption bar opens over other apps during recording. Drag it to move or snap it to an edge. Use the minus and plus buttons to collapse and expand it. The bar closes when recording ends.
 
 ### Multi-speaker meetings
 
 Added in v0.0.3.
 
-Enable **Multi-speaker meeting** before recording or importing, or select **Identify speakers** for an existing recording. Speaker labels are added after recording or import. The limit is 60 minutes and 128 MiB. The first run downloads about 38 MiB of model data. If the download fails, import the model file in the studio. Open **Speaker transcript** to rename speakers, correct attribution, replay or export. Reports and shared drafts include timestamps and speaker labels. Set the speaker count when known and review overlapping speech. Import an audio file for online meetings.
+Choose **Multi-speaker meeting** before recording or importing, or select **Identify speakers** for an existing recording. Speaker labels are added after recording or import. The limit is 60 minutes and 128 MiB. The first run downloads about 38 MiB of model data. If the download fails, import the model file in the studio. Open **Speaker transcript** to rename speakers, correct attribution, replay or export. Reports and shared drafts include timestamps and speaker labels. Set the speaker count when known and review overlapping speech. Import an audio file for online meetings.
 
 Run `npm test` to test the plugin and `npm pack --ignore-scripts` to build the installation package.
 

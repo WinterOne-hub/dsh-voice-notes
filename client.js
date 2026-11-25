@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.8';
+    const BUILD = '0.0.9';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       ['ja', '日本語'],
       ['ko', '한국어'],
     ];
+    const CAPTION_MODES = ['off', 'original', 'translation'];
     const UI_LANGUAGES = ['auto', 'zh', 'en'];
     const TARGETS = [
       ['off', 'translate.off'],
@@ -60,8 +61,13 @@ window.__ModuleLoader__.load({
     const SAMPLE_RATE = 16_000;
     /** Start a new recognition slice after this much continuous speech. */
     const SEGMENT_SECONDS = 28;
-    /** Silence that closes a segment. */
-    const SILENCE_MS = 1400;
+    const RECORDING_SCENES = {
+      auto: { pauseMs: 1400 },
+      meeting: { pauseMs: 1100, reportKind: 'meeting' },
+      lecture: { pauseMs: 2200, reportKind: 'lecture' },
+      'self-study': { pauseMs: 1600, reportKind: 'learning' },
+    };
+    const REPORT_KINDS = ['meeting', 'lecture', 'learning'];
     /** RMS above this counts as speech. */
     const VOICE_RMS = 0.008;
     /** Minimum slice worth sending. */
@@ -110,6 +116,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 `;
 
     const ZH = {
+      "caption.label": "桌面字幕",
+      "caption.off": "关闭",
+      "caption.original": "原文",
+      "caption.translation": "译文优先",
+      "caption.waiting": "等待字幕…",
+      "caption.failed": "桌面字幕未能打开或已中断，录音仍在继续。",
+      "caption.missing": "当前安装包缺少桌面字幕组件。",
+      "caption.unsupported": "此平台暂不支持桌面字幕。",
+      "caption.unverified": "桌面字幕组件校验失败，请重新安装。",
+      "caption.busy": "已有录音正在使用桌面字幕。",
+      "scene.label": "录音场景",
+      "scene.auto": "自动",
+      "scene.meeting": "多人会议",
+      "scene.lecture": "课程模式",
+      "scene.self-study": "自学模式",
+      "scene.hint.lecture": "适合讲座和单人报告，短暂停顿时继续合并转写。",
+      "scene.hint.self-study": "适合视频和播客，推荐使用电脑声音。",
       "help.title": "使用说明",
       "ui.language": "界面语言",
       "ui.auto": "跟随 Harness",
@@ -120,11 +143,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "help.import": "转写已有录音",
       "help.importText": "点击「导入音频」，选择本地文件。首次转写需下载识别模型。单个文件最多 128 MiB、2 小时。",
       "help.meeting": "多人会议",
-      "help.meetingText": "录制或导入前勾选「多人会议」，也可在历史里识别说话人。处理结束后，在多人转写里修改名称或逐段调整归属。",
+      "help.meetingText": "录制或导入前选择「多人会议」场景，也可在历史里识别说话人。处理结束后，在多人转写里修改名称或逐段调整归属。",
       "help.history": "回听、搜索和导出",
       "help.historyText": "在历史搜索录音或转写，点时间戳回听，或在转写中校对。TXT 导出在录音卡片的操作菜单中。",
       "help.report": "报告与分享到新会话",
-      "help.reportText": "选择会议纪要或学习笔记及输出语言。可将全文或选中文字分享到未发送的新会话草稿。",
+      "help.reportText": "选择会议纪要、课程笔记或学习笔记，以及输出语言。可将全文或选中文字分享到未发送的新会话草稿。",
       "help.translation": "翻译与延迟诊断",
       "help.translationText": "选好译文语言后，正式转写完成的片段会陆续翻译。录音前可打开「延迟诊断」查看本次耗时。计时从工作台收到音频开始。",
       "help.privacy": "保存位置和隐私",
@@ -214,7 +237,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "meeting.getModel": "下载模型文件",
       "meeting.installingModel": "正在校验模型文件…",
       "meeting.modelReady": "模型已安装。可在录音卡片重新识别。",
-      "meeting.mode": "多人会议",
       "meeting.modeHint": "停录或导入后识别说话人，最长 60 分钟。",
       "meeting.count": "说话人数",
       "meeting.auto": "自动",
@@ -254,6 +276,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "report.kind.auto": "按声音来源",
       "report.kind.meeting": "会议纪要",
       "report.kind.learning": "学习笔记",
+      "report.kind.lecture": "课程笔记",
       "report.pending": "请先补转缺失片段，再生成报告。",
       "system.noSamples": "电脑声音采集已中断。已收到 {seconds} 秒音频。",
       "meeting.hint": "用时间戳回听。抢话、短插话和声音相近时，标签可能有误。",
@@ -337,6 +360,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'history.searchThis': '搜索这条录音的转写',
       'history.searchCount': '{n} 段匹配',
       'history.foldTranscript': '收起转写',
+      'history.expandTranscript': '展开转写',
+      'history.expandReport': '展开报告',
+      'history.foldReport': '收起报告',
       'history.tools': '更多操作',
       'history.refreshing': '正在刷新…',
       'history.refreshed': '已刷新 · {n} 条录音',
@@ -359,7 +385,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'record.start': '准备录音',
       'history.play': '播放',
       'history.pause': '暂停',
-      'history.transcript': '转写',
       'history.analysis': '分析',
       'history.moreActions': '更多',
       'report.goPending': '去补转',
@@ -492,6 +517,23 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     };
 
     const EN = {
+      "caption.label": "Desktop captions",
+      "caption.off": "Off",
+      "caption.original": "Original",
+      "caption.translation": "Prefer translation",
+      "caption.waiting": "Waiting for captions…",
+      "caption.failed": "Desktop captions could not open or were interrupted. Recording continues.",
+      "caption.missing": "This package is missing the desktop captions component.",
+      "caption.unsupported": "Desktop captions are unavailable on this platform.",
+      "caption.unverified": "Desktop captions component verification failed. Reinstall the package.",
+      "caption.busy": "Another recording is using desktop captions.",
+      "scene.label": "Recording mode",
+      "scene.auto": "Automatic",
+      "scene.meeting": "Multi-speaker meeting",
+      "scene.lecture": "Lecture",
+      "scene.self-study": "Self-study",
+      "scene.hint.lecture": "For lectures and solo talks. Short pauses stay in the same transcript segment.",
+      "scene.hint.self-study": "For videos and podcasts. Computer audio is recommended.",
       "help.title": "How to use Voice Notes",
       "ui.language": "Interface language",
       "ui.auto": "Follow Harness",
@@ -502,11 +544,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "help.import": "Transcribe an existing recording",
       "help.importText": "Select Import audio and choose a local file. First use requires downloading the speech model. Files are limited to 128 MiB and two hours.",
       "help.meeting": "Multi-speaker meetings",
-      "help.meetingText": "Enable Multi-speaker meeting before recording or importing, or identify speakers from history. When it finishes, rename speakers or reassign individual segments.",
+      "help.meetingText": "Select Multi-speaker meeting before recording or importing, or identify speakers from history. When it finishes, rename speakers or reassign individual segments.",
       "help.history": "Playback, search and export",
       "help.historyText": "Search history for recordings or transcript text, select a timestamp to listen, or correct the transcript. Export TXT from the recording’s action menu.",
       "help.report": "Reports and sharing",
-      "help.reportText": "Choose Meeting Notes or Learning Notes and an output language. Share the full transcript or selected text to an unsent draft in a new chat.",
+      "help.reportText": "Choose Meeting Notes, Lecture Notes or Learning Notes and an output language. Share the full transcript or selected text to an unsent draft in a new chat.",
       "help.translation": "Translation and latency diagnostics",
       "help.translationText": "Choose a target language to translate each finalized segment. Enable Latency diagnostics before recording to see timings for that recording. Timing starts when audio reaches the studio.",
       "help.privacy": "Storage and privacy",
@@ -596,7 +638,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "meeting.getModel": "Download model file",
       "meeting.installingModel": "Verifying model file…",
       "meeting.modelReady": "Model installed. Run speaker identification from the recording card.",
-      "meeting.mode": "Multi-speaker meeting",
       "meeting.modeHint": "Identify speakers after recording or import. Up to 60 minutes.",
       "meeting.count": "Number of speakers",
       "meeting.auto": "Auto",
@@ -636,6 +677,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "report.kind.auto": "By audio source",
       "report.kind.meeting": "Meeting notes",
       "report.kind.learning": "Learning notes",
+      "report.kind.lecture": "Lecture notes",
       "report.pending": "Retry missing transcript segments before generating a report.",
       "system.noSamples": "Computer audio stopped receiving samples. Received {seconds} seconds of audio.",
       "meeting.hint": "Replay from a timestamp. Labels can be wrong with crosstalk, short turns, or similar voices.",
@@ -719,6 +761,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'history.searchThis': 'Search this transcript',
       'history.searchCount': '{n} matching segments',
       'history.foldTranscript': 'Collapse transcript',
+      'history.expandTranscript': 'Expand transcript',
+      'history.expandReport': 'Expand report',
+      'history.foldReport': 'Collapse report',
       'history.tools': 'More actions',
       'history.refreshing': 'Refreshing…',
       'history.refreshed': 'Refreshed · {n} recordings',
@@ -741,7 +786,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       'record.start': 'Ready to record',
       'history.play': 'Play',
       'history.pause': 'Pause',
-      'history.transcript': 'Transcript',
       'history.analysis': 'Analysis',
       'history.moreActions': 'More',
       'report.goPending': 'Go to missing segments',
@@ -1141,13 +1185,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       transcribingSegments: 0,
       savedNotice: '',
       importing: false,
-      meetingMode: false,
+      recordingScene: Object.hasOwn(RECORDING_SCENES, prefs.recordingScene) ? prefs.recordingScene : 'auto',
       meetingSpeakers: 0,
       meetingJob: null,
       updating: false,
       importNotice: '',
       importError: '',
-      reportKind: ['meeting', 'learning'].includes(prefs.reportKind) ? prefs.reportKind : 'auto',
+      reportKind: REPORT_KINDS.includes(prefs.reportKind) ? prefs.reportKind : 'auto',
       reportLanguage: REPORT_LANGUAGES.some(([code]) => code === prefs.reportLanguage) ? prefs.reportLanguage : 'auto',
       targetLanguage: savedTarget,
       sourceLanguage: savedSource,
@@ -1160,6 +1204,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       pendingSegments: 0,
       captureWarning: '',
       captureSignal: 'waiting',
+      captionMode: CAPTION_MODES.includes(prefs.captionMode) ? prefs.captionMode : 'off',
+      captionError: '',
       measureLatency: false,
       latency: null,
       retrySaving: false,
@@ -1596,13 +1642,25 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return `[${formatTime(turn.start)}] ${meetingLabel(meeting, turn, t)}: `;
     }
 
-    function recordingText(recording, t) {
+    function reportTemplate(preference, scene, source) {
+      return REPORT_KINDS.includes(preference) ? preference
+        : RECORDING_SCENES[scene]?.reportKind ?? (source === 'system' ? 'learning' : 'meeting');
+    }
+
+    function recordingText(recording, t, withTimestamps = false) {
       if (recording.meeting) return recording.meeting.turns
         .map((turn) => meetingPrefix(recording.meeting, turn, t) + (turn.correction ?? turn.text)).join('\n');
+      if (withTimestamps && recording.segments?.length) {
+        const timed = recording.segments.map((part) => {
+          const text = (part.correction ?? part.text ?? '').trim();
+          return part.state === 'ready' && text ? `[${formatTime(part.start)}] ${text}` : '';
+        }).filter(Boolean).join('\n');
+        if (timed) return timed;
+      }
       return recording.correctedText ?? recording.text ?? '';
     }
 
-    async function importAudio(load, { title, mimeType, language, source, meetingSpeakers, reportKind }) {
+    async function importAudio(load, { title, mimeType, language, source, meetingSpeakers, reportKind, recordingScene }) {
       const current = store.get();
       if (current.importing || current.updating || ['requesting', 'recording', 'finishing'].includes(current.phase)) return;
       store.set({ importing: true, importNotice: translate('import.reading'), importError: '' });
@@ -1634,7 +1692,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (decoded.duration < 0.05) throw new Error(translate('import.invalid'));
         store.set({ importNotice: translate('import.saving') });
         const { recording } = await request('/recordings/live', {
-          json: { title, mimeType, language, source, reportKind, providerId: provider.id },
+          json: { title, mimeType, language, source, reportKind, recordingScene, providerId: provider.id },
         });
         run = { id: recording.id };
         const path = archivePath(run);
@@ -1655,6 +1713,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           const end = Math.min(start + frames, decoded.length);
           if ((end - start) / rate < 0.05) break;
           store.set({ importNotice: translate('import.progress', { done: id + 1, total }) });
+          if (recordingScene === 'self-study' &&
+              channels.every((channel) => !channel.subarray(start, end).some((sample) => sample !== 0))) continue;
           const samples = new Float32Array(end - start);
           for (const channel of channels) {
             for (let at = start; at < end; at += 1) samples[at - start] += channel[at] / channels.length;
@@ -1925,12 +1985,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       return translate(`system.${['missing', 'unsupported', 'unverified', 'deviceChanged', 'limit'].includes(code) ? code : 'failed'}`);
     }
 
-    async function openSystemAudio(language, reportKind) {
+    async function openSystemAudio(language, reportKind, recordingScene) {
       const availability = await request('/system-audio', { method: 'GET' });
       if (!availability.ready) throw new Error(computerAudioMessage(availability.code));
       const response = await fetch(`${API}/system-audio`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ confirmed: true, language, reportKind }), signal: engine.abort.signal,
+        body: JSON.stringify({ confirmed: true, language, reportKind, recordingScene }), signal: engine.abort.signal,
       });
       let session;
       try { session = await readJsonResponse(response); }
@@ -2041,6 +2101,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const rate = engine.capture.audio.sampleRate;
       let sum = 0;
       for (let index = 0; index < input.length; index += 1) sum += input[index] * input[index];
+      if (sum > 0) segment.hasAudio = true;
       const rms = Math.sqrt(sum / input.length);
       if (rms >= VOICE_RMS) {
         run.lastSignalAt = receivedAt;
@@ -2057,6 +2118,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         return;
       }
       if (
+        (!run.skipDigitalSilence || segment.hasAudio) &&
         !engine.partialBusy &&
         segment.count >= rate * 0.8 &&
         now - engine.lastPartialAt >= PARTIAL_MS
@@ -2129,9 +2191,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         const rate = engine.capture.audio.sampleRate;
         const openSeconds = segment.count / rate;
         if (openSeconds >= SEGMENT_SECONDS ||
-          (engine.hasSpeech && now - engine.lastVoiceAt >= SILENCE_MS && openSeconds >= MIN_SECONDS)) {
+          (engine.hasSpeech && now - engine.lastVoiceAt >= RECORDING_SCENES[run.recordingScene].pauseMs && openSeconds >= MIN_SECONDS)) {
           finalizeSegment(generation, run);
-        } else if (run.id && !run.checkpointBusy && openSeconds >= MIN_SECONDS && now - run.lastCheckpoint >= CHECKPOINT_MS) {
+        } else if (run.id && (!run.skipDigitalSilence || segment.hasAudio) && !run.checkpointBusy && openSeconds >= MIN_SECONDS && now - run.lastCheckpoint >= CHECKPOINT_MS) {
           run.checkpointBusy = true;
           run.lastCheckpoint = now;
           putSegment(run, snapshotSegment(segment, rate), true)
@@ -2200,6 +2262,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       engine.lastVoiceAt = 0;
       engine.lastPartialAt = 0;
       run.lastCheckpoint = Date.now();
+      if (run.skipDigitalSilence && !segment.hasAudio) return;
       store.set((state) => ({ ...state, partialText: '', transcribingSegments: state.transcribingSegments + 1 }));
       const snapshot = snapshotSegment(segment, rate);
       const stored = run.id ? putSegment(run, snapshot).then(() => true, (error) => {
@@ -2370,15 +2433,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     async function generateMeetingReport(generation, run) {
+      if (!run?.id || generation !== engine.generation || store.get().reporting) return;
       store.set({ reporting: true, reportError: '' });
       try {
         const { recording } = await request(archivePath(run), { method: 'GET' });
         if (generation !== engine.generation) return;
         if (recording.reportPending) throw new Error(translate('report.pending'));
-        const source = recordingText(recording, translate).trim();
+        const reportKind = reportTemplate(recording.reportKind, run.recordingScene, run.source);
+        const source = recordingText(recording, translate, reportKind !== 'meeting').trim();
         if (!source) { store.set({ reporting: false }); return; }
-        const preference = recording.reportKind ?? store.get().reportKind;
-        const reportKind = preference === 'auto' ? (run.source === 'system' ? 'learning' : 'meeting') : preference;
         const report = await createMeetingReport(source, run.model, store.get().reportLanguage, reportKind);
         const { recording: updated } = await request(archivePath(run), {
           method: 'PATCH', json: { report, reportKind, reportSource: recording.reportSource },
@@ -2457,10 +2520,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       engine.run = null;
       const language = store.get().sourceLanguage;
       const captureOptions = store.get();
-      const meetingSpeakers = captureOptions.surface === 'studio' && captureOptions.meetingMode
-        ? captureOptions.meetingSpeakers : undefined;
-      const computerAudio = captureOptions.surface === 'studio' && captureOptions.captureSource === 'system';
-      const reportKind = captureOptions.surface === 'studio' ? captureOptions.reportKind : undefined;
+      const studio = captureOptions.surface === 'studio';
+      const recordingScene = studio ? captureOptions.recordingScene : 'auto';
+      const meetingSpeakers = recordingScene === 'meeting' ? captureOptions.meetingSpeakers : undefined;
+      const computerAudio = studio && captureOptions.captureSource === 'system';
+      const reportKind = studio ? reportTemplate(captureOptions.reportKind, recordingScene, computerAudio ? 'system' : 'microphone') : undefined;
       if (computerAudio && !window.confirm(translate('system.confirm') +
         (captureOptions.translate || captureOptions.editMode || captureOptions.reportMode
           ? '\n\n' + modelDisclosure(captureOptions, translate) : ''))) {
@@ -2471,7 +2535,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       store.set({ phase: 'requesting', providerId: provider.id, error: '' });
       let capture;
       try {
-        capture = computerAudio ? await openSystemAudio(language, reportKind) : await openMicrophone(archive);
+        capture = computerAudio ? await openSystemAudio(language, reportKind, recordingScene) : await openMicrophone(archive);
       } catch (error) {
         if (generation !== engine.generation) return;
         store.set({ phase: 'error', error: computerAudio ? messageOf(error) : micError(error) });
@@ -2487,12 +2551,14 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       try {
         const recording = capture.recording ?? (archive
           ? (await request('/recordings/live', {
-              json: { mimeType: capture.mimeType, language, reportKind, providerId: provider.id },
+              json: { mimeType: capture.mimeType, language, reportKind, recordingScene, providerId: provider.id },
             })).recording : null);
         if (generation !== engine.generation) return;
         const run = {
           id: recording?.id ?? null,
           source: computerAudio ? 'system' : 'microphone',
+          recordingScene,
+          skipDigitalSilence: computerAudio && recordingScene === 'self-study',
           meetingSpeakers,
           localTexts: new Map(),
           language,
@@ -3742,7 +3808,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function ReportTemplateSelect({ value, setValue, t, disabled, allowAuto }) {
-      const choices = allowAuto ? ['auto', 'meeting', 'learning'] : ['meeting', 'learning'];
+      const choices = allowAuto ? ['auto', ...REPORT_KINDS] : REPORT_KINDS;
       return h('label', { className: 'vls-lang' }, t('report.kind'),
         h('select', { className: 'vl-select', value, disabled, onChange: (event) => setValue(event.target.value) },
           choices.map((kind) => h('option', { key: kind, value: kind }, t(`report.kind.${kind}`)))));
@@ -4132,12 +4198,13 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const [recordingQuery, setRecordingQuery] = React.useState('');
       const [selection, setSelection] = React.useState(null);
       const [recognitionLanguage, setRecognitionLanguage] = React.useState(item.language || 'auto');
-      const selectedReportKind = details?.reportKind ?? item.reportKind ?? (item.source === 'system' ? 'learning' : 'meeting');
+      const selectedReportKind = reportTemplate(details?.reportKind ?? item.reportKind, item.recordingScene, item.source);
       const [reportLanguage, setReportLanguage] = React.useState(store.get().reportLanguage);
       const audioRef = React.useRef(null);
       const transcriptRoot = React.useRef(null);
       const segmentList = React.useRef(null);
       const cardTop = React.useRef(null);
+      const reportToggle = React.useRef(null);
       const meetingRoot = React.useRef(null);
       const path = `/recordings/${item.id}`;
       const itemMeetingJob = meetingJob?.id === item.id ? meetingJob : null;
@@ -4272,7 +4339,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         void run('report', async () => {
           const recording = await fetchDetails();
           if (recording.reportPending) throw new Error(t('report.pending'));
-          const transcript = recordingText(recording, t).trim();
+          const transcript = recordingText(recording, t, selectedReportKind !== 'meeting').trim();
           if (!transcript) return;
           const model = (await fetchStatus()).model;
           if (!modelKey(model)) throw new Error(t('model.unavailable'));
@@ -4295,7 +4362,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
       async function renameRecording(event) {
         event.preventDefault();
-        if (!title.trim()) return;
+        if (busy || !title.trim()) return;
         await run('rename', async () => {
           const { recording } = await request(path, { method: 'PATCH', json: { title } });
           setDetails(recording);
@@ -4467,8 +4534,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const pendingCount = details?.pendingCount ?? item.pendingCount ?? 0;
       const firstPending = details?.segments?.find((part) => part.state !== 'ready');
       const reportStale = Boolean(details?.reportStale || details?.meetingReportStale);
-      const hasDetails = Boolean(original || text || item.segmentCount > 0 || item.hasCorrections);
+      const hasDetails = Boolean(original || text || details?.segments?.length || item.segmentCount > 0 ||
+        item.hasTranscript || item.hasCorrections);
       const hasTranscript = details?.meeting || item.hasMeeting || (details ? Boolean(text.trim()) : (item.hasTranscript ?? Boolean(text)));
+      const reportOpen = tool === 'report';
+      const currentTitle = details?.title ?? item.title;
       const matches = details?.segments?.filter(segmentMatches).length ?? 0;
 
       function retranscribe() {
@@ -4479,10 +4549,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.blob();
         }, {
-          title: t('import.copyTitle', { title: item.title.slice(0, 92) }),
+          title: (details?.customTitle ?? item.customTitle)
+            ? currentTitle : t('import.copyTitle', { title: currentTitle.slice(0, 92) }),
           mimeType: item.mimeType || 'audio/webm',
           language: recognitionLanguage,
           source: 'retranscription',
+          recordingScene: item.recordingScene,
           reportKind: selectedReportKind,
         });
       }
@@ -4496,7 +4568,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         : null;
       return h('li', { className: 'vls-item' },
         h('div', { className: 'vls-item-head' },
-          h('span', { className: 'vls-item-title', title: item.title }, highlighted(item.title, query) || t('studio.noText')),
+          rename ? h('form', { className: 'vls-item-head', onSubmit: renameRecording },
+            h('input', { className: 'vls-input', 'aria-label': t('history.title'), value: title, required: true,
+              autoFocus: true, readOnly: busy === 'rename', maxLength: 120, onChange: (event) => setTitle(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key !== 'Escape' || busy) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setRename(false);
+              },
+            }),
+            h('button', { type: 'submit', className: 'vls-mini', disabled: !!busy || !title.trim() }, t('history.save')),
+            h('button', { type: 'button', className: 'vls-mini', disabled: !!busy, onClick: () => setRename(false) }, t('studio.cancel')),
+          ) : h(React.Fragment, null,
+            h('span', { className: 'vls-item-title', title: currentTitle }, highlighted(currentTitle, query) || t('studio.noText')),
+            h('button', { type: 'button', className: 'vls-mini', disabled: active || !!busy,
+              onClick: () => { setTitle(currentTitle); setRename(true); } }, t('history.rename')),
+          ),
+          Object.hasOwn(RECORDING_SCENES, item.recordingScene) ? h('span', null, t(`scene.${item.recordingScene}`)) : null,
           h('span', null, formatDate(item.createdAt)),
           h('span', null, formatTime(item.duration)),
           h('span', null, item.size ? formatBytes(item.size) : t('studio.noAudio')),
@@ -4508,11 +4597,11 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           hasDetails ? h('button', {
             type: 'button', className: 'vls-mini', ref: cardTop, 'data-primary': 'true', 'aria-expanded': expanded,
             onClick: () => expanded ? foldTranscript(false) : setExpanded(true),
-          }, t(expanded ? 'history.foldTranscript' : 'history.transcript')) : null,
-          !active && (hasTranscript || item.hasReport || pendingCount) ? h('button', {
-            type: 'button', className: 'vls-mini', 'aria-expanded': tool === 'report',
-            onClick: () => setTool(tool === 'report' ? '' : 'report'),
-          }, t('history.report')) : null,
+          }, t(expanded ? 'history.foldTranscript' : 'history.expandTranscript')) : null,
+          !active && (reportOpen || hasTranscript || item.hasReport || details?.report || pendingCount) ? h('button', {
+            type: 'button', className: 'vls-mini', ref: reportToggle, 'aria-expanded': reportOpen,
+            onClick: () => setTool(reportOpen ? '' : 'report'),
+          }, t(reportOpen ? 'history.foldReport' : 'history.expandReport')) : null,
           item.matchingSegments > 0 && term ? h('button', {
             type: 'button', className: 'vls-mini', onClick: locateMatch,
           }, t('history.jump')) : null,
@@ -4551,8 +4640,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               href: `${API}${path}/transcript?variant=original` }, t('history.exportOriginal')) : null,
             !active && item.hasCorrections ? h('a', { className: 'vls-mini', download: true,
               href: `${API}${path}/transcript?variant=corrected` }, t('history.exportCorrected')) : null,
-            h('button', { type: 'button', className: 'vls-mini', disabled: active || !!busy,
-              onClick: () => { setTitle(item.title); setRename(true); } }, t('history.rename')),
             h('button', { type: 'button', className: 'vls-mini', 'data-danger': 'true', disabled: active || !!busy,
               onClick: () => void removeItem(item) }, t('studio.delete')),
           ),
@@ -4560,12 +4647,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           derived(details?.translation, t('live.translation')),
           ),
         ),
-        rename ? h('form', { className: 'vls-item-head', onSubmit: renameRecording },
-          h('input', { className: 'vls-input', 'aria-label': t('history.title'), value: title, required: true,
-            maxLength: 120, onChange: (event) => setTitle(event.target.value) }),
-          h('button', { type: 'submit', className: 'vls-mini', disabled: !!busy || !title.trim() }, t('history.save')),
-          h('button', { type: 'button', className: 'vls-mini', disabled: !!busy, onClick: () => setRename(false) }, t('studio.cancel')),
-        ) : null,
         active ? h('p', { className: 'vl-note' }, t('history.active')) : null,
         item.status === 'interrupted' ? h('p', { className: 'vl-note' }, t('history.interrupted')) : null,
         pendingCount && tool !== 'report' ? h('p', { className: 'vl-note' }, t('history.pending', { n: pendingCount })) : null,
@@ -4600,7 +4681,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             title: t('import.retranscribeHint'), onClick: retranscribe }, t('import.retranscribe')),
           h('p', { className: 'vl-note' }, t('import.retranscribeHint')),
         ) : null,
-        tool === 'report' ? h('section', { className: 'vls-report-block', 'aria-label': t('history.report') },
+        reportOpen ? h('section', { className: 'vls-report-block', 'aria-label': t('history.report') },
           details?.reportPending ? h('div', { className: 'vls-report-notice', role: 'status' },
             h('span', null, pendingCount ? t('history.pending', { n: pendingCount }) : t('report.pending')), ' ',
             firstPending ? h('button', { type: 'button', className: 'vl-btn', onClick: goToPending }, t('report.goPending'))
@@ -4620,8 +4701,17 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             h('button', { type: 'button', className: 'vls-mini', disabled: details.reportStale || details.meetingReportStale, onClick: () => void copy(details.report, `${item.id}:report`) },
               t(copiedId === `${item.id}:report` ? 'studio.copied' : 'studio.copyReport')),
           ) : null,
+          h('button', { type: 'button', className: 'vls-mini', onClick: () => {
+            setTool('');
+            reportToggle.current?.scrollIntoView({ block: 'nearest' });
+            reportToggle.current?.focus({ preventScroll: true });
+          } }, t('history.foldReport')),
         ) : null,
-        !expanded ? h('p', { className: 'vls-item-text' }, highlighted(text.slice(0, 500), shownQuery) || t('studio.noText')) : null,
+        !expanded ? h(React.Fragment, null,
+          h('p', { className: 'vls-item-text' }, highlighted(text.slice(0, 500), shownQuery) || t('studio.noText')),
+          hasDetails && text ? h('button', { type: 'button', className: 'vls-mini', 'aria-expanded': false,
+            onClick: () => setExpanded(true) }, t('history.expandTranscript')) : null,
+        ) : null,
         expanded && !details && !error ? h('p', { className: 'vl-note' }, t('studio.loading')) : null,
         expanded && details ? h('div', null,
           h('div', { className: 'vls-options-row' },
@@ -4769,6 +4859,15 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       );
     }
 
+    function ResultDisclosure({ expandLabel, collapseLabel, children }) {
+      const [open, setOpen] = React.useState(true);
+      return h('section', { className: 'vls-report-block' },
+        h('button', { className: 'vls-mini', type: 'button', 'aria-expanded': open,
+          onClick: () => setOpen((value) => !value) }, open ? collapseLabel : expandLabel),
+        open ? children : null,
+      );
+    }
+
     function Studio(props) {
       const t = translate;
       const state = useStore();
@@ -4802,8 +4901,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           language: state.sourceLanguage,
           mimeType: importedMime(file),
           source: 'import',
-          reportKind: state.reportKind,
-          meetingSpeakers: state.meetingMode ? state.meetingSpeakers : undefined,
+          reportKind: reportTemplate(state.reportKind, state.recordingScene),
+          recordingScene: state.recordingScene,
+          meetingSpeakers: state.recordingScene === 'meeting' ? state.meetingSpeakers : undefined,
         });
       }
 
@@ -5137,47 +5237,21 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         body = h(
           'div',
           { className: 'vls-live' },
-          h(
-            'p',
-            { className: 'vls-live-text', 'data-empty': resultText ? 'false' : 'true' },
-            resultText || t('result.empty'),
-          ),
-          state.translate || translation
-            ? h(StudioTranslation, { t, state })
-            : null,
+          resultText ? h(ResultDisclosure, { key: 'transcript', expandLabel: t('history.expandTranscript'),
+            collapseLabel: t('history.foldTranscript') },
+            h('p', { className: 'vls-live-text' }, resultText),
+          ) : h('p', { className: 'vls-live-text', 'data-empty': 'true' }, t('result.empty')),
+          state.translate || translation ? h(StudioTranslation, { t, state }) : null,
           state.report || state.reporting || state.reportError
-            ? h(
-                'div',
-                { className: 'vls-report-block' },
-                h(
-                  'div',
-                  { className: 'vl-label' },
-                  t('studio.report'),
-                  state.reportMode ? h('b', null, 'AUTO') : null,
-                ),
-                state.reporting
-                  ? h('p', { className: 'vl-note' }, t('studio.generating'))
-                  : state.report
-                    ? h(
-                        React.Fragment,
-                        null,
-                        h(ReportBody, { text: state.report }),
-                        h(
-                          'button',
-                          {
-                            type: 'button',
-                            className: 'vl-btn',
-                            'data-quiet': 'true',
-                            onClick: () => void copy(state.report, 'report'),
-                          },
-                          copiedId === 'report' ? t('studio.copied') : t('studio.copyReport'),
-                        ),
-                      )
-                    : h(
-                        'p',
-                        { className: 'vls-error' },
-                        t('studio.reportFailed', { message: state.reportError }),
-                      ),
+            ? h(ResultDisclosure, { key: 'report', expandLabel: t('history.expandReport'),
+                collapseLabel: t('history.foldReport') },
+                state.reporting ? h('p', { className: 'vl-note', role: 'status' }, t('studio.generating'))
+                  : state.report ? h(React.Fragment, null,
+                    h(ReportBody, { text: state.report }),
+                    h('button', { type: 'button', className: 'vl-btn', 'data-quiet': 'true',
+                      onClick: () => void copy(state.report, 'report') },
+                    copiedId === 'report' ? t('studio.copied') : t('studio.copyReport')),
+                  ) : h('p', { className: 'vls-error' }, t('studio.reportFailed', { message: state.reportError })),
               )
             : null,
           h(
@@ -5204,7 +5278,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   copiedId === 'translation' ? t('studio.copied') : t('live.translation'),
                 )
               : null,
-            resultText && !state.report && !state.reporting
+            resultText && engine.run?.id && !state.report && !state.reporting
               ? h(
                   'button',
                   {
@@ -5212,7 +5286,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                     disabled: !activeModel(state),
                     onClick: () => {
                       if (window.confirm(modelDisclosure(state, t))) {
-                        void generateMeetingReport(resultText, engine.generation);
+                        void generateMeetingReport(engine.generation, engine.run);
                       }
                     },
                     title: modelDisclosure(state, t),
@@ -5312,7 +5386,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 onChange: chooseAudio,
               }),
               h('button', {
-                type: 'button', className: 'vl-btn', disabled: state.importing || state.updating || recording || requesting || finishing || (state.meetingMode && state.meetingJob?.active),
+                type: 'button', className: 'vl-btn', disabled: state.importing || state.updating || recording || requesting || finishing || (state.recordingScene === 'meeting' && state.meetingJob?.active),
                 title: t('import.formats'), onClick: () => importPicker.current?.click(),
               }, t('import.open')),
             ),
@@ -5340,7 +5414,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                   type: 'button',
                   className: 'vls-mic',
                   'data-recording': recording ? 'true' : 'false',
-                  disabled: phase === 'setup' || finishing || state.updating || state.importing || (state.meetingMode && state.meetingJob?.active && !recording),
+                  disabled: phase === 'setup' || finishing || state.updating || state.importing || (state.recordingScene === 'meeting' && state.meetingJob?.active && !recording),
                   onClick: onMic,
                 },
                 h(Icon, { name: recording ? 'stop' : requesting ? 'close' : studioSource === 'system' ? 'computer' : 'mic', size: 19 }),
@@ -5374,16 +5448,24 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               ),
             ),
             h('div', { className: 'vls-options-row' },
-              h('label', { className: 'vls-lang' },
-                h('input', { type: 'checkbox', checked: state.meetingMode, disabled: recording || requesting || finishing || state.importing,
-                  onChange: (event) => store.set({ meetingMode: event.target.checked }) }),
-                t('meeting.mode'),
+              h('label', { className: 'vls-lang' }, t('scene.label'),
+                h('select', { className: 'vl-select', value: state.recordingScene,
+                  disabled: recording || requesting || finishing || state.importing,
+                  onChange: (event) => {
+                    const recordingScene = event.target.value;
+                    if (!Object.hasOwn(RECORDING_SCENES, recordingScene)) return;
+                    store.set({ recordingScene });
+                    savePrefs({ recordingScene });
+                  },
+                }, Object.keys(RECORDING_SCENES).map((scene) =>
+                  h('option', { key: scene, value: scene }, t(`scene.${scene}`)))),
               ),
-              state.meetingMode ? h(SpeakerCount, { t, value: state.meetingSpeakers,
+              state.recordingScene === 'meeting' ? h(SpeakerCount, { t, value: state.meetingSpeakers,
                 disabled: recording || requesting || finishing || state.importing,
                 change: (meetingSpeakers) => store.set({ meetingSpeakers }),
               }) : null,
-              state.meetingMode ? h('span', { className: 'vl-note' }, t('meeting.modeHint')) : null,
+              state.recordingScene !== 'auto' ? h('span', { className: 'vl-note' },
+                t(state.recordingScene === 'meeting' ? 'meeting.modeHint' : `scene.hint.${state.recordingScene}`)) : null,
             ),
             state.meetingJob ? h('div', { className: 'vls-options-row', role: 'status' },
               h('span', { className: state.meetingJob.error ? 'vls-error' : 'vl-note' }, t(`meeting.${state.meetingJob.phase}`)),
@@ -5425,6 +5507,18 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 }),
               ),
               h('p', { className: 'vl-note' }, modelDisclosure(state, t)),
+            ),
+            h('div', { className: 'vls-options-row' },
+              h('label', { className: 'vls-lang' }, t('caption.label'),
+                h('select', { className: 'vl-select', value: state.captionMode, onChange: (event) => {
+                  const mode = event.target.value;
+                  if (!CAPTION_MODES.includes(mode)) return;
+                  store.set({ captionMode: mode, captionError: '' });
+                  savePrefs({ captionMode: mode });
+                } }, CAPTION_MODES.map((mode) =>
+                  h('option', { key: mode, value: mode }, t(`caption.${mode}`)))),
+              ),
+              state.captionError ? h('span', { className: 'vl-note', role: 'status' }, t(`caption.${state.captionError}`)) : null,
             ),
             h(DictationPreferences, { state, t }),
             h('details', null,
@@ -5544,6 +5638,86 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           ),
         ),
       );
+    }
+
+    function mountDesktopCaptions() {
+      let current;
+      const path = '/desktop-captions';
+      const endpoint = API + path;
+
+      function textFor(state) {
+        const translation = state.captionMode === 'translation' && state.translate ? state.translationText : '';
+        return (translation || state.partialText || state.finalText || translate('caption.waiting')).slice(-320);
+      }
+
+      function stop() {
+        if (!current) return;
+        current.controller.abort();
+        clearTimeout(current.timer);
+        current = undefined;
+      }
+
+      function fail(session, code) {
+        if (current !== session || session.failed) return;
+        session.failed = true;
+        session.controller.abort();
+        clearTimeout(session.timer);
+        const key = ['busy', 'missing', 'unsupported', 'unverified'].includes(code) ? code : 'failed';
+        store.set({ captionError: key });
+      }
+
+      async function open(session, text) {
+        try {
+          const response = await fetch(endpoint, {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ id: session.id, text }), signal: session.controller.signal,
+          });
+          if (!response.ok) await readJsonResponse(response);
+          if (current !== session) return;
+          if (!response.body) throw new Error('Caption connection closed');
+          session.ready = true;
+          update();
+          const reader = response.body.getReader();
+          while (!(await reader.read()).done) { /* the open response owns the native window */ }
+          fail(session);
+        } catch (error) {
+          fail(session, error.code);
+        }
+      }
+
+      function update() {
+        const state = store.get();
+        if (state.phase !== 'recording' || state.captionMode === 'off') { stop(); return; }
+        const text = textFor(state);
+        if (!current) {
+          current = { id: crypto.randomUUID(), controller: new AbortController(), sent: text };
+          if (state.captionError) store.set({ captionError: '' });
+          void open(current, text);
+          return;
+        }
+        const session = current;
+        if (!session.ready || session.failed || session.timer || session.sending || session.sent === text) return;
+        session.timer = setTimeout(async () => {
+          session.timer = undefined;
+          if (current !== session) return;
+          const latest = textFor(store.get());
+          if (session.sent === latest) return;
+          session.sending = true;
+          try {
+            await request(path, { method: 'PATCH', json: { id: session.id, text: latest }, timeout: 3000 });
+            session.sent = latest;
+          } catch (error) {
+            fail(session, error.code);
+          } finally {
+            session.sending = false;
+            update();
+          }
+        }, 160);
+      }
+
+      const unsubscribe = store.subscribe(update);
+      update();
+      return () => { unsubscribe(); stop(); };
     }
 
     function mountRecordingIndicator(openStudio) {
@@ -5688,6 +5862,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         );
 
         const layout = ctx.get('layout');
+        ctx.effect(() => mountDesktopCaptions(), 'voice-live: desktop captions');
         ctx.effect(() => mountRecordingIndicator(() => layout?.selectPanel?.('voice-live')), 'voice-live: recording indicator');
         ctx.effect(() => {
           document.addEventListener('keydown', handleDictationShortcut, true);

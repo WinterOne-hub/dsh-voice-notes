@@ -1,6 +1,6 @@
 {
   "name": "dsh-voice-notes",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "type": "module",
   "description": "DeepSeek Harness 本地录音转写、电脑声音录制、学习笔记和会议分析 / Local transcription, computer audio, learning notes and meeting analysis for DeepSeek Harness.",
   "exports": {
@@ -30,6 +30,7 @@
     "NOTICE.md",
     "pcm.js",
     "system-audio.js",
+    "desktop-captions.js",
     "native/macos/*",
     "native/windows/*",
     "scripts/build-system-audio.mjs",
@@ -38,7 +39,11 @@
     "native/bin/darwin-arm64/VoiceNotesAudio.app/Contents/MacOS/VoiceNotesAudio",
     "native/bin/darwin-arm64/VoiceNotesAudio.app/Contents/_CodeSignature/CodeResources",
     "native/bin/win32-x64.json",
-    "native/bin/win32-x64/system-audio.exe"
+    "native/bin/win32-x64/system-audio.exe",
+    "native/bin/darwin-arm64-captions.json",
+    "native/bin/darwin-arm64/voice-captions",
+    "native/bin/win32-x64-captions.json",
+    "native/bin/win32-x64/voice-captions.exe"
   ],
   "dsh": {
     "bundle": {

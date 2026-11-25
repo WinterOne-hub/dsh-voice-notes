@@ -34,7 +34,7 @@ test('computer audio requires confirmation, archives PCM, and stops without mode
   const capture = createSystemAudio({ recordings, getHelper: async () => process.execPath, args: ['-e', generator] });
   t.after(() => capture.dispose());
   await assert.rejects(capture.start({}), { code: 'confirmation' });
-  const session = await capture.start({ confirmed: true, language: 'en' });
+  const session = await capture.start({ confirmed: true, language: 'en', recordingScene: 'self-study', reportKind: 'learning' });
   assert.equal(session.sampleRate, 16000);
   await assert.rejects(capture.start({ confirmed: true }), { code: 'busy' });
   const out = response(); capture.stream(session.id, out.stream);
@@ -44,6 +44,8 @@ test('computer audio requires confirmation, archives PCM, and stops without mode
   assert.equal(stopped.active, false); assert.equal(stopped.code, null);
   const meta = await recordings.get(session.recordingId);
   assert.equal(meta.source, 'system'); assert.equal(meta.systemPcm, true);
+  assert.equal(meta.recordingScene, 'self-study');
+  assert.equal(meta.reportKind, 'learning');
   assert.ok(meta.size > 0); assert.equal(out.bytes().length, meta.size);
   assert.equal(out.stream.headers['cache-control'], 'private, no-store, no-transform');
   const info = await recordings.audioStat(meta);
