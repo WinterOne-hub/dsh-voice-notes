@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.9';
+    const BUILD = '0.0.10';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
       ['ja', '日本語'],
       ['ko', '한국어'],
     ];
+    const CAPTION_SENTENCES = new Intl.Segmenter(undefined, { granularity: 'sentence' });
     const CAPTION_MODES = ['off', 'original', 'translation'];
     const UI_LANGUAGES = ['auto', 'zh', 'en'];
     const TARGETS = [
@@ -120,7 +121,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "caption.off": "关闭",
       "caption.original": "原文",
       "caption.translation": "译文优先",
-      "caption.waiting": "等待字幕…",
+      "caption.waiting": "录音中 · 等待完整字幕…",
+      "caption.hint": "选择原文或译文优先，即可在其他应用上方显示字幕。",
       "caption.failed": "桌面字幕未能打开或已中断，录音仍在继续。",
       "caption.missing": "当前安装包缺少桌面字幕组件。",
       "caption.unsupported": "此平台暂不支持桌面字幕。",
@@ -521,7 +523,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "caption.off": "Off",
       "caption.original": "Original",
       "caption.translation": "Prefer translation",
-      "caption.waiting": "Waiting for captions…",
+      "caption.waiting": "Recording · Waiting for a complete caption…",
+      "caption.hint": "Choose Original or Prefer translation to show captions over other apps.",
       "caption.failed": "Desktop captions could not open or were interrupted. Recording continues.",
       "caption.missing": "This package is missing the desktop captions component.",
       "caption.unsupported": "Desktop captions are unavailable on this platform.",
@@ -1219,6 +1222,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       elapsed: 0,
       level: 0,
       finalText: '',
+      captionOriginal: null,
+      captionTranslation: null,
       partialText: '',
       translationText: '',
       translationLabel: '译',
@@ -1288,6 +1293,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         elapsed: 0,
         level: 0,
         finalText: '',
+        captionOriginal: null,
+        captionTranslation: null,
         editedText: '',
         editing: false,
         editError: '',
@@ -2190,9 +2197,10 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         const segment = engine.segment;
         const rate = engine.capture.audio.sampleRate;
         const openSeconds = segment.count / rate;
-        if (openSeconds >= SEGMENT_SECONDS ||
-          (engine.hasSpeech && now - engine.lastVoiceAt >= RECORDING_SCENES[run.recordingScene].pauseMs && openSeconds >= MIN_SECONDS)) {
-          finalizeSegment(generation, run);
+        const paused = engine.hasSpeech && now - engine.lastVoiceAt >= RECORDING_SCENES[run.recordingScene].pauseMs &&
+          openSeconds >= MIN_SECONDS;
+        if (openSeconds >= SEGMENT_SECONDS || paused) {
+          finalizeSegment(generation, run, paused);
         } else if (run.id && (!run.skipDigitalSilence || segment.hasAudio) && !run.checkpointBusy && openSeconds >= MIN_SECONDS && now - run.lastCheckpoint >= CHECKPOINT_MS) {
           run.checkpointBusy = true;
           run.lastCheckpoint = now;
@@ -2252,7 +2260,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       }
     }
 
-    function finalizeSegment(generation, run) {
+    function finalizeSegment(generation, run, paused = false) {
       const segment = engine.segment;
       if (generation !== engine.generation || !segment?.count) return;
       if (segment.count / run.sampleRate < 0.05) return;
@@ -2286,9 +2294,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
           }
           if (generation !== engine.generation || !text) return;
           if (!run.id) run.localTexts.set(snapshot.id, text);
-          store.set({ finalText: joinText(store.get().finalText, text) });
+          store.set({ finalText: joinText(store.get().finalText, text), captionOriginal: { text, paused } });
           recordLatency(run, 'final', segment.lastSignalAt);
-          if (store.get().translate) queueTranslation(text, generation, run, false, segment.lastSignalAt);
+          if (store.get().translate) queueTranslation(text, generation, run, false, segment.lastSignalAt, paused);
         } catch (error) {
           if (generation !== engine.generation) return;
           if (!run.id) run.segmentFailures.set(snapshot.id, snapshot);
@@ -2329,7 +2337,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       if (changed && state.editMode) void generateEditedText(text, generation, run);
     }
 
-    function queueTranslation(text, generation, run, replace = false, startedAt) {
+    function queueTranslation(text, generation, run, replace = false, startedAt, paused = false) {
       const target = store.get().targetLanguage;
       const revision = run.translationRevision;
       if (!shouldTranslate(text, target)) return Promise.resolve();
@@ -2340,7 +2348,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         if (visible()) store.set({ translating: true, translateError: '' });
         if (replace) run.translated = '';
         try {
-          for (const [index, chunk] of splitText(text).entries()) {
+          const chunks = splitText(text);
+          for (const [index, chunk] of chunks.entries()) {
             if (!currentTarget()) return;
             const body = await request('/translate', {
               json: { text: chunk, target, model: run.model },
@@ -2348,7 +2357,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             if (!currentTarget()) return;
             run.translated = joinText(run.translated, body.text);
             if (visible()) {
-              store.set({ translationText: run.translated, translationLabel: targetLabel(target) });
+              store.set({
+                translationText: run.translated, translationLabel: targetLabel(target),
+                ...(body.text && !replace ? {
+                  captionTranslation: { text: body.text, paused: paused && index === chunks.length - 1 },
+                } : {}),
+              });
               if (index === 0 && body.text) recordLatency(run, 'translation', startedAt);
             }
           }
@@ -2810,6 +2824,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         translate: target !== 'off',
         translationLabel: targetLabel(target),
         translationText: '',
+        captionTranslation: null,
         translateError: '',
       });
       const state = store.get();
@@ -4584,6 +4599,8 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             h('span', { className: 'vls-item-title', title: currentTitle }, highlighted(currentTitle, query) || t('studio.noText')),
             h('button', { type: 'button', className: 'vls-mini', disabled: active || !!busy,
               onClick: () => { setTitle(currentTitle); setRename(true); } }, t('history.rename')),
+            h('button', { type: 'button', className: 'vls-mini', 'data-danger': 'true', disabled: active || !!busy,
+              onClick: () => void removeItem(item) }, t('studio.delete')),
           ),
           Object.hasOwn(RECORDING_SCENES, item.recordingScene) ? h('span', null, t(`scene.${item.recordingScene}`)) : null,
           h('span', null, formatDate(item.createdAt)),
@@ -4640,8 +4657,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               href: `${API}${path}/transcript?variant=original` }, t('history.exportOriginal')) : null,
             !active && item.hasCorrections ? h('a', { className: 'vls-mini', download: true,
               href: `${API}${path}/transcript?variant=corrected` }, t('history.exportCorrected')) : null,
-            h('button', { type: 'button', className: 'vls-mini', 'data-danger': 'true', disabled: active || !!busy,
-              onClick: () => void removeItem(item) }, t('studio.delete')),
           ),
           derived(details?.editedText, t('model.edited')),
           derived(details?.translation, t('live.translation')),
@@ -5448,6 +5463,18 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
               ),
             ),
             h('div', { className: 'vls-options-row' },
+              h('label', { className: 'vls-lang' }, t('caption.label'),
+                h('select', { className: 'vl-select', value: state.captionMode, onChange: (event) => {
+                  const mode = event.target.value;
+                  if (!CAPTION_MODES.includes(mode)) return;
+                  store.set({ captionMode: mode, captionError: '' });
+                  savePrefs({ captionMode: mode });
+                } }, CAPTION_MODES.map((mode) =>
+                  h('option', { key: mode, value: mode }, t(`caption.${mode}`)))),
+              ),
+              state.captionError ? h('span', { className: 'vl-note', role: 'status' }, t(`caption.${state.captionError}`)) : state.captionMode === 'off' ? h('span', { className: 'vl-note' }, t('caption.hint')) : null,
+            ),
+            h('div', { className: 'vls-options-row' },
               h('label', { className: 'vls-lang' }, t('scene.label'),
                 h('select', { className: 'vl-select', value: state.recordingScene,
                   disabled: recording || requesting || finishing || state.importing,
@@ -5507,18 +5534,6 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
                 }),
               ),
               h('p', { className: 'vl-note' }, modelDisclosure(state, t)),
-            ),
-            h('div', { className: 'vls-options-row' },
-              h('label', { className: 'vls-lang' }, t('caption.label'),
-                h('select', { className: 'vl-select', value: state.captionMode, onChange: (event) => {
-                  const mode = event.target.value;
-                  if (!CAPTION_MODES.includes(mode)) return;
-                  store.set({ captionMode: mode, captionError: '' });
-                  savePrefs({ captionMode: mode });
-                } }, CAPTION_MODES.map((mode) =>
-                  h('option', { key: mode, value: mode }, t(`caption.${mode}`)))),
-              ),
-              state.captionError ? h('span', { className: 'vl-note', role: 'status' }, t(`caption.${state.captionError}`)) : null,
             ),
             h(DictationPreferences, { state, t }),
             h('details', null,
@@ -5645,9 +5660,34 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const path = '/desktop-captions';
       const endpoint = API + path;
 
-      function textFor(state) {
-        const translation = state.captionMode === 'translation' && state.translate ? state.translationText : '';
-        return (translation || state.partialText || state.finalText || translate('caption.waiting')).slice(-320);
+      function collect(session, state) {
+        const translation = state.captionMode === 'translation' && state.translate && state.captionTranslation;
+        const source = translation ? state.targetLanguage : 'original';
+        const chunk = translation || state.captionOriginal;
+        if (session.source !== source) {
+          session.source = source;
+          session.last = undefined;
+          session.tail = '';
+          session.queue.length = 0;
+        }
+        if (!chunk || session.last === chunk) return;
+        session.last = chunk;
+        const combined = joinText(session.tail, chunk.text);
+        session.tail = '';
+        for (const { segment } of CAPTION_SENTENCES.segment(combined)) {
+          const text = joinText(session.tail, segment);
+          const abbreviation = /\b(?:mr|mrs|ms|dr|prof|sr|jr|st|vs)\.$/i.test(text);
+          if (!abbreviation && /[。！？!?…．.][”’"')\]）】」』]*$/u.test(text)) {
+            session.queue.push(text);
+            session.tail = '';
+          } else {
+            session.tail = text;
+          }
+        }
+        if (chunk.paused && session.tail) {
+          session.queue.push(session.tail);
+          session.tail = '';
+        }
       }
 
       function stop() {
@@ -5688,31 +5728,32 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       function update() {
         const state = store.get();
         if (state.phase !== 'recording' || state.captionMode === 'off') { stop(); return; }
-        const text = textFor(state);
         if (!current) {
-          current = { id: crypto.randomUUID(), controller: new AbortController(), sent: text };
+          const session = { id: crypto.randomUUID(), controller: new AbortController(),
+            queue: [], tail: '', nextAt: 0 };
+          current = session;
           if (state.captionError) store.set({ captionError: '' });
-          void open(current, text);
-          return;
+          void open(session, translate('caption.waiting'));
         }
         const session = current;
-        if (!session.ready || session.failed || session.timer || session.sending || session.sent === text) return;
+        collect(session, state);
+        if (!session.ready || session.failed || session.timer || session.sending || !session.queue.length) return;
         session.timer = setTimeout(async () => {
           session.timer = undefined;
-          if (current !== session) return;
-          const latest = textFor(store.get());
-          if (session.sent === latest) return;
+          if (current !== session || !session.queue.length) return;
+          const text = session.queue.shift().slice(0, 2000);
           session.sending = true;
           try {
-            await request(path, { method: 'PATCH', json: { id: session.id, text: latest }, timeout: 3000 });
-            session.sent = latest;
+            await request(path, { method: 'PATCH', json: { id: session.id, text }, timeout: 3000 });
+            const dwell = Math.max(1200, Math.min(6200, 900 + Array.from(text).length * 52));
+            session.nextAt = performance.now() + dwell;
           } catch (error) {
             fail(session, error.code);
           } finally {
             session.sending = false;
             update();
           }
-        }, 160);
+        }, Math.max(0, session.nextAt - performance.now()));
       }
 
       const unsubscribe = store.subscribe(update);

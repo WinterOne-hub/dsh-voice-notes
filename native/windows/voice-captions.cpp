@@ -55,6 +55,37 @@ void place(HWND window, const RECT& area, long centerX, long centerY, int width,
     SetWindowPos(window, HWND_TOPMOST, x, y, width, height, SWP_NOACTIVATE);
 }
 
+HFONT captionFont(HWND window) {
+    return CreateFontW(-scaled(window, 17), 0, 0, 0, FW_MEDIUM,
+        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+}
+
+std::wstring currentCaption() {
+    const std::scoped_lock lock(captionMutex);
+    return caption;
+}
+
+SIZE captionSize(HWND window, const RECT& area) {
+    if (collapsed) return { scaled(window, 48), scaled(window, 38) };
+    const auto line = currentCaption();
+    const HDC dc = GetDC(window);
+    const HFONT font = captionFont(window);
+    const auto previous = SelectObject(dc, font);
+    SIZE extent{};
+    GetTextExtentPoint32W(dc, line.c_str(), static_cast<int>(line.size()), &extent);
+    const int width = std::min({ int(area.right - area.left), scaled(window, 660),
+        std::max(scaled(window, 126), int(extent.cx) + scaled(window, 68)) });
+    RECT bounds{0, 0, std::max(1, width - scaled(window, 60)), 0};
+    DrawTextW(dc, line.c_str(), -1, &bounds, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+    SelectObject(dc, previous);
+    DeleteObject(font);
+    ReleaseDC(window, dc);
+    const int height = std::min(int((area.bottom - area.top) * 0.65),
+        std::max(scaled(window, 44), int(bounds.bottom) + scaled(window, 20)));
+    return { width, height };
+}
+
 void draw(HWND window) {
     PAINTSTRUCT paint{};
     const HDC dc = BeginPaint(window, &paint);
@@ -65,25 +96,19 @@ void draw(HWND window) {
     DeleteObject(background);
     SetBkMode(dc, TRANSPARENT);
     SetTextColor(dc, RGB(255, 255, 255));
-    const HFONT font = CreateFontW(-scaled(window, 17), 0, 0, 0, FW_MEDIUM,
-        FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+    const HFONT font = captionFont(window);
     const auto previous = SelectObject(dc, font);
     RECT toggle = bounds;
     toggle.left = std::max(0L, bounds.right - scaled(window, 40));
     DrawTextW(dc, collapsed ? L"+" : L"\u2212", -1, &toggle, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     if (!collapsed) {
-        std::wstring line;
-        {
-            const std::scoped_lock lock(captionMutex);
-            line = caption;
-        }
-        RECT content = bounds;
-        content.left += scaled(window, 14);
-        content.top += scaled(window, 10);
-        content.right = toggle.left - scaled(window, 4);
-        content.bottom -= scaled(window, 6);
-        DrawTextW(dc, line.c_str(), -1, &content, DT_WORDBREAK | DT_END_ELLIPSIS | DT_NOPREFIX | DT_EDITCONTROL);
+        const auto line = currentCaption();
+        RECT content{scaled(window, 12), 0, bounds.right - scaled(window, 48), bounds.bottom};
+        constexpr UINT flags = DT_CENTER | DT_WORDBREAK | DT_NOPREFIX | DT_EDITCONTROL;
+        RECT measured = content;
+        DrawTextW(dc, line.c_str(), -1, &measured, flags | DT_CALCRECT);
+        content.top = std::max(0L, (bounds.bottom - measured.bottom) / 2);
+        DrawTextW(dc, line.c_str(), -1, &content, flags);
     }
     SelectObject(dc, previous);
     DeleteObject(font);
@@ -110,14 +135,24 @@ LRESULT CALLBACK onMessage(HWND window, UINT message, WPARAM wp, LPARAM lp) {
         if (message == WM_EXITSIZEMOVE || (message == WM_LBUTTONUP && dock == Edge::none)) {
             dock = nearestEdge(frame, area, collapsed ? -1 : scaled(window, 30));
         }
-        place(window, area, (frame.left + frame.right) / 2, (frame.top + frame.bottom) / 2,
-            scaled(window, collapsed ? 48 : 570), scaled(window, collapsed ? 38 : 78));
+        const SIZE size = captionSize(window, area);
+        place(window, area, (frame.left + frame.right) / 2, (frame.top + frame.bottom) / 2, size.cx, size.cy);
         InvalidateRect(window, nullptr, FALSE);
         return 0;
     }
-    case captionMessage:
+    case captionMessage: {
+        if (!collapsed) {
+            RECT frame{};
+            GetWindowRect(window, &frame);
+            const auto area = workArea(window);
+            const SIZE size = captionSize(window, area);
+            if (size.cx != frame.right - frame.left || size.cy != frame.bottom - frame.top) {
+                place(window, area, (frame.left + frame.right) / 2, frame.bottom - size.cy / 2, size.cx, size.cy);
+            }
+        }
         InvalidateRect(window, nullptr, FALSE);
         return 0;
+    }
     case WM_PAINT:
         draw(window);
         return 0;
@@ -133,7 +168,7 @@ LRESULT CALLBACK onMessage(HWND window, UINT message, WPARAM wp, LPARAM lp) {
 }
 
 std::wstring decoded(const std::string& bytes) {
-    if (bytes.empty() || bytes.size() > 1024) return {};
+    if (bytes.empty() || bytes.size() > 8192) return {};
     const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
     if (length == 0) return {};
     std::wstring line(length, L'\0');
@@ -152,10 +187,10 @@ int main() {
     descriptor.lpszClassName = className;
     if (!RegisterClassW(&descriptor)) return 1;
     const HWND window = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
-        className, L"Voice Notes captions", WS_POPUP, 0, 0, 570, 78, nullptr, nullptr, instance, nullptr);
+        className, L"Voice Notes captions", WS_POPUP, 0, 0, 180, 44, nullptr, nullptr, instance, nullptr);
     if (!window) return 1;
     const auto area = workArea(window);
-    place(window, area, (area.left + area.right) / 2, area.bottom - scaled(window, 56), scaled(window, 570), scaled(window, 78));
+    place(window, area, (area.left + area.right) / 2, area.bottom - scaled(window, 40), scaled(window, 180), scaled(window, 44));
     ShowWindow(window, SW_SHOWNOACTIVATE);
     UpdateWindow(window);
     std::cout << "ready\n" << std::flush;

@@ -25,8 +25,9 @@ final class CaptionView: NSView {
         layer?.cornerRadius = 12
         text.textColor = .white
         text.font = .systemFont(ofSize: 16, weight: .medium)
-        text.maximumNumberOfLines = 2
-        text.lineBreakMode = .byTruncatingHead
+        text.alignment = .center
+        text.maximumNumberOfLines = 0
+        text.lineBreakMode = .byWordWrapping
         addSubview(text)
         toggle.target = self
         toggle.action = #selector(changeSize)
@@ -46,11 +47,41 @@ final class CaptionView: NSView {
 
     override func layout() {
         super.layout()
-        text.frame = NSRect(x: 16, y: 12, width: max(0, bounds.width - 64), height: max(0, bounds.height - 24))
+        let width = max(1, bounds.width - 60)
+        let height = min(max(0, bounds.height - 16), measuredHeight(width: width))
+        text.frame = NSRect(x: 12, y: (bounds.height - height) / 2, width: width, height: height)
         toggle.frame = NSRect(x: bounds.width - 39, y: (bounds.height - 28) / 2, width: 32, height: 28)
     }
 
-    func update(_ line: String) { text.stringValue = line }
+    func update(_ line: String) {
+        text.stringValue = line
+        guard !collapsed, let window, let screen = window.screen else { return }
+        let area = screen.visibleFrame
+        let previous = window.frame
+        let size = captionSize(in: area)
+        needsLayout = true
+        if abs(size.height - previous.height) < 1 && abs(size.width - previous.width) < 1 { return }
+        let frame = NSRect(x: previous.midX - size.width / 2, y: previous.minY, width: size.width, height: size.height)
+        window.setFrame(placed(frame, in: area, edge: dock), display: true)
+    }
+
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [.font: text.font ?? .systemFont(ofSize: 16)]
+    }
+
+    private func measuredHeight(width: CGFloat) -> CGFloat {
+        let limit = NSSize(width: max(1, width - 4), height: .greatestFiniteMagnitude)
+        let rect = (text.stringValue as NSString).boundingRect(with: limit,
+            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: textAttributes)
+        return ceil(rect.height) + 4
+    }
+
+    private func captionSize(in area: NSRect) -> NSSize {
+        let unwrapped = (text.stringValue as NSString).size(withAttributes: textAttributes).width
+        let width = min(area.width, 660, max(126, ceil(unwrapped) + 70))
+        let height = min(area.height * 0.65, max(44, measuredHeight(width: width - 60) + 18))
+        return NSSize(width: width, height: height)
+    }
 
     override func mouseDown(with event: NSEvent) {
         guard let window else { return }
@@ -106,9 +137,8 @@ final class CaptionView: NSView {
         let area = screen.visibleFrame
         dock = dock ?? nearestEdge(previous, within: area, always: true)
         collapsed.toggle()
-        let width: CGFloat = collapsed ? 48 : min(570, area.width)
-        let height: CGFloat = collapsed ? 38 : 78
-        let frame = NSRect(x: previous.midX - width / 2, y: previous.midY - height / 2, width: width, height: height)
+        let size = collapsed ? NSSize(width: 48, height: 38) : captionSize(in: area)
+        let frame = NSRect(x: previous.midX - size.width / 2, y: previous.midY - size.height / 2, width: size.width, height: size.height)
         text.isHidden = collapsed
         toggle.title = collapsed ? "+" : "−"
         window.setFrame(placed(frame, in: area, edge: dock), display: true)
@@ -119,8 +149,8 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 guard let screen = NSScreen.main else { exit(1) }
 let area = screen.visibleFrame
-let width = min(CGFloat(570), area.width)
-let panel = CaptionPanel(contentRect: NSRect(x: area.midX - width / 2, y: area.minY + 18, width: width, height: 78),
+let width = min(CGFloat(180), area.width)
+let panel = CaptionPanel(contentRect: NSRect(x: area.midX - width / 2, y: area.minY + 18, width: width, height: 44),
     styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
 panel.level = .floating
 panel.backgroundColor = .clear
