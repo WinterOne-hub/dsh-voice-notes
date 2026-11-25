@@ -45,7 +45,7 @@ test('computer audio requires confirmation, archives PCM, and stops without mode
   const meta = await recordings.get(session.recordingId);
   assert.equal(meta.source, 'system'); assert.equal(meta.systemPcm, true);
   assert.ok(meta.size > 0); assert.equal(out.bytes().length, meta.size);
-  assert.equal(out.stream.headers['cache-control'], 'private, no-store');
+  assert.equal(out.stream.headers['cache-control'], 'private, no-store, no-transform');
   const info = await recordings.audioStat(meta);
   const wave = Buffer.concat(await Array.fromAsync(recordings.audioStream(meta, { start: 0, end: info.size - 1 })));
   assert.deepEqual(wave.subarray(0, 44), pcmWaveHeader(meta.size));

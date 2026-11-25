@@ -87,7 +87,9 @@ async function fixture(t) {
 
   async function call(path, method = 'GET', body, headers = {}, address = '127.0.0.1') {
     const pathname = path.split('?')[0];
-    const route = routes.find((r) => r.kind === 'exact' ? r.path === pathname : pathname.startsWith(r.path));
+    const route = routes.find((r) => r.kind === 'exact' && r.path === pathname)
+      ?? routes.filter((r) => r.kind === 'prefix' && (r.path === pathname || pathname.startsWith(r.path + '/')))
+        .sort((a, b) => b.path.length - a.path.length)[0];
     assert.ok(route, path);
     const bytes = body === undefined ? [] : [Buffer.isBuffer(body) ? body : Buffer.from(JSON.stringify(body))];
     const req = Object.assign(Readable.from(bytes), {
@@ -1087,7 +1089,7 @@ test('interpretation cancellation and competing replacements preserve the last s
   assert.equal((await call(path)).data.report.id, current.id);
 });
 
-async function checkComputerAudio(t, deviceChanged) {
+async function checkComputerAudio(t, deviceChanged, empty = false) {
   const { call, dataRoot, state } = await fixture(t);
   const archive = createRecordingStore(join(dataRoot, 'recordings'));
   const pcm = Buffer.alloc(32000);
@@ -1103,25 +1105,30 @@ async function checkComputerAudio(t, deviceChanged) {
       if (options.method === 'POST') {
         assert.equal(JSON.parse(options.body).confirmed, true);
         const recording = await archive.save({ live: true, source: 'system', systemPcm: true, mimeType: 'audio/wav', language: 'en' });
-        id = recording.id; await archive.appendChunk(id, 0, pcm, 1);
+        id = recording.id;
+        if (!empty) await archive.appendChunk(id, 0, pcm, 1);
         return json({ id: 'test-capture', recording, sampleRate: 16000 });
       }
       if (path.endsWith('/stream')) return { ok: true, body: new ReadableStream({
-        start(value) { controller = value; value.enqueue(pcm.subarray(0, 3)); value.enqueue(pcm.subarray(3)); },
+        start(value) {
+          controller = value;
+          if (!empty) { value.enqueue(pcm.subarray(0, 3)); value.enqueue(pcm.subarray(3)); }
+        },
       }) };
-      if (options.method === 'DELETE' && !deviceChanged) controller.close();
-      return json({ active: false, code: deviceChanged ? 'deviceChanged' : null });
+      if (options.method === 'DELETE' && !deviceChanged && !empty) controller.close();
+      return json({ active: false, code: empty ? 'noSamples' : deviceChanged ? 'deviceChanged' : null });
     },
   });
   assert.equal(store.get().captureSource, 'microphone');
   store.set({ captureSource: 'system' });
   await begin(null, null, false, 'studio');
-  while (engine.pcmSamples < 16000) await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(engine.pcmSamples, 16000); assert.equal(engine.capture.recorder, undefined);
-  if (deviceChanged) {
+  const expectedSamples = empty ? 0 : 16000;
+  while (!controller || engine.pcmSamples < expectedSamples) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(engine.pcmSamples, expectedSamples); assert.equal(engine.capture.recorder, undefined);
+  if (empty || deviceChanged) {
     controller.close();
     await waitFor(store, (s) => s.phase === 'result');
-    assert.match(store.get().captureWarning, /输出设备已变化/);
+    assert.match(store.get().captureWarning, empty ? /未收到电脑声音/ : /输出设备已变化/);
   } else {
     await finish('stop');
     assert.equal(store.get().captureWarning, '');
@@ -1129,8 +1136,12 @@ async function checkComputerAudio(t, deviceChanged) {
   assert.equal(confirmations, 1);
   assert.equal(store.get().phase, 'result');
   const recording = await archive.get(id);
-  assert.equal(recording.status, deviceChanged ? 'interrupted' : 'complete');
-  assert.equal(recording.text, 'Raw model output');
+  assert.equal(recording.status, empty || deviceChanged ? 'interrupted' : 'complete');
+  assert.equal(recording.text, empty ? '' : 'Raw model output');
+  if (empty) {
+    assert.equal(store.get().archiveStage, 'empty');
+    assert.equal(store.get().savedNotice, '');
+  }
   assert.equal(state.modelCalls, 0);
 }
 
@@ -1138,6 +1149,18 @@ test('computer audio streams odd byte boundaries without opening a microphone', 
   (t) => checkComputerAudio(t, false));
 test('computer audio device changes stop capture and preserve audio and transcription', { timeout: 4000 },
   (t) => checkComputerAudio(t, true));
+test('computer audio with no samples reports an empty recording', { timeout: 4000 },
+  (t) => checkComputerAudio(t, false, true));
+
+test('computer audio session URLs reach the plugin under Harness prefix matching', async (t) => {
+  const { call } = await fixture(t);
+  const session = `${API}/system-audio/00000000-0000-0000-0000-000000000000`;
+  for (const [path, method] of [[session, 'GET'], [session + '/stream', 'GET'], [session, 'DELETE']]) {
+    const { status, data } = await call(path, method);
+    assert.equal(status, 404);
+    assert.equal(data.error.code, 'missingSession');
+  }
+});
 
 test('learning notes honor language and require selected-model confirmation for both partial and merged reports', async (t) => {
   const { call, model, state } = await fixture(t);

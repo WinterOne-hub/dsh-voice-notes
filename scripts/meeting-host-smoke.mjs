@@ -88,6 +88,12 @@ initProfile(profile, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']);
   assert.equal(computerAudio.ready, true, 'Installed native audio component must pass integrity checks without capture');
   assert.equal(computerAudio.active, false);
   assert.equal((await raw('/system-audio', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirmed: false, language: 'en' }) })).status, 400);
+  const missingCapture = '/system-audio/00000000-0000-0000-0000-000000000000';
+  for (const [path, method] of [[missingCapture, 'GET'], [missingCapture + '/stream', 'GET'], [missingCapture, 'DELETE']]) {
+    const absent = await raw(path, { method });
+    assert.equal(absent.status, 404);
+    assert.equal((await absent.json()).error.code, 'missingSession', `${method} ${path} must reach the plugin`);
+  }
   const models = await send('/meeting-models', 'GET');
   assert.equal(models.supported, true, 'The Host ships the correct native runtime');
   assert.equal(models.ready, false);
