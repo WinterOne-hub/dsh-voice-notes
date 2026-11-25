@@ -1237,7 +1237,7 @@ export async function apply(ctx, config) {
     throw new HttpError(405, '不支持此操作');
   });
   ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: `${API}/system-audio`, handler: systemCapture }), 'voice-live: computer audio');
-  ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API}/system-audio/`, handler: systemCapture }), 'voice-live: computer audio sessions');
+  ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: `${API}/system-audio`, handler: systemCapture }), 'voice-live: computer audio sessions');
 
   const routes = [
     ['/status', status],

@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'voice-live';
-    const BUILD = '0.0.7';
+    const BUILD = '0.0.8';
     const SOURCE_LANGUAGES = [
       ['auto', 'translate.auto'],
       ['zh', '简体中文'],
@@ -142,7 +142,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "system.unsupported": "电脑声音需要 macOS 14.2+（Apple Silicon）或 Windows x64。",
       "system.unverified": "电脑声音组件校验失败，请重新安装。",
       "system.deviceChanged": "输出设备已变化，录音已停止。已采集的音频保留。",
-      "system.noSamples": "电脑声音采集已中断。已收到 {seconds} 秒音频。",
+      "system.empty": "未收到电脑声音。请检查播放设备和系统录音权限。",
       "system.limit": "电脑声音录制已达到 60 分钟上限。",
       "system.failed": "电脑声音录制失败或被中断。请检查系统音频权限和输出设备。",
 
@@ -255,7 +255,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "report.kind.meeting": "会议纪要",
       "report.kind.learning": "学习笔记",
       "report.pending": "请先补转缺失片段，再生成报告。",
-      "system.noSamples": "电脑声音已中断。已保存 {seconds} 秒。",
+      "system.noSamples": "电脑声音采集已中断。已收到 {seconds} 秒音频。",
       "meeting.hint": "用时间戳回听。抢话、短插话和声音相近时，标签可能有误。",
       dictate: '语音输入（边录边写）',
       'phase.requesting': '正在请求麦克风…',
@@ -524,7 +524,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "system.unsupported": "Computer audio requires macOS 14.2+ (Apple Silicon) or Windows x64.",
       "system.unverified": "Computer audio integrity check failed. Reinstall the package.",
       "system.deviceChanged": "Output device changed. Recording stopped; captured audio is preserved.",
-      "system.noSamples": "Computer audio stopped receiving samples. Received {seconds} seconds of audio.",
+      "system.empty": "No computer audio received. Check the playback device and system audio permissions.",
       "system.limit": "Computer audio reached its 60-minute limit.",
       "system.failed": "Computer audio failed or was interrupted. Check system audio permission and output device.",
 
@@ -637,7 +637,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       "report.kind.meeting": "Meeting notes",
       "report.kind.learning": "Learning notes",
       "report.pending": "Retry missing transcript segments before generating a report.",
-      "system.noSamples": "Computer audio stopped. Saved {seconds} seconds.",
+      "system.noSamples": "Computer audio stopped receiving samples. Received {seconds} seconds of audio.",
       "meeting.hint": "Replay from a timestamp. Labels can be wrong with crosstalk, short turns, or similar voices.",
       dictate: 'Voice input (live transcription)',
       'phase.requesting': 'Requesting microphone…',
@@ -1697,7 +1697,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         run.sealed = true;
         store.set((state) => ({
           ...state,
-          ...(engine.run === run ? { lastRecording: recording, archiveError: '', archiveStage: 'saved' } : {}),
+          ...(engine.run === run ? {
+            lastRecording: recording, archiveError: '', archiveStage: run.source === 'system' && !recording.size ? 'empty' : 'saved',
+          } : {}),
           historyVersion: state.historyVersion + 1,
         }));
         return recording;
@@ -1917,7 +1919,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
     }
 
     function computerAudioMessage(code, seconds = 0) {
-      if (code === 'noSamples') return translate('system.noSamples', { seconds: Math.round(seconds * 100) / 100 });
+      if (code === 'noSamples') return seconds > 0
+        ? translate('system.noSamples', { seconds: Math.round(seconds * 100) / 100 })
+        : translate('system.empty');
       return translate(`system.${['missing', 'unsupported', 'unverified', 'deviceChanged', 'limit'].includes(code) ? code : 'failed'}`);
     }
 
@@ -2080,8 +2084,9 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
 
     function flushPcm(capture) {
       if (capture?.system) return capture.stopNative().catch((error) => {
+        if (engine.capture !== capture) return;
         if (engine.run) engine.run.interrupted = true;
-        store.set({ captureWarning: messageOf(error) });
+        store.set({ captureWarning: computerAudioMessage(error.code) });
       });
       return new Promise((resolve) => {
         if (!capture?.worklet) {
@@ -2601,11 +2606,12 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
         flashNotice();
         return;
       }
+      const savedAudio = saved && current.archiveStage === 'saved';
       store.set({
         phase: 'result', result: { text },
-        savedNotice: saved ? translate('recording.saved') : '',
+        savedNotice: savedAudio ? translate('recording.saved') : '',
       });
-      if (saved) flashNotice();
+      if (savedAudio) flashNotice();
     }
 
     async function cancel(dispose = false) {
@@ -2922,6 +2928,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
       const n = state.transcribingSegments;
       if (state.archiveStage === 'stopping') return t('recording.stopping');
       if (state.archiveStage === 'failed') return t('recording.saveFailed');
+      if (state.archiveStage === 'empty') return t('system.empty');
       if (state.archiveStage === 'saved') {
         return n ? t('recording.savedProcessing', { n }) : t('recording.saved');
       }
@@ -4977,7 +4984,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             : phase === 'setup'
               ? t('setup.title')
               : phase === 'result'
-                ? (state.archiveStage === 'saved' ? stopFeedback(state, t) : t('result.title'))
+                ? (['saved', 'empty'].includes(state.archiveStage) ? stopFeedback(state, t) : t('result.title'))
                 : phase === 'error'
                   ? t('error.title')
                   : t('record.start');
@@ -5221,7 +5228,7 @@ registerProcessor('voice-live-capture', VoiceLiveCapture);
             ),
           ),
           h(EditedText, { state, t }),
-          state.lastRecording && engine.run?.sealed
+          state.archiveStage === 'saved' && state.lastRecording && engine.run?.sealed
             ? h('p', { className: 'vls-save' }, t('studio.saved'))
             : null,
           h(ArchiveStatus, { state, t }),

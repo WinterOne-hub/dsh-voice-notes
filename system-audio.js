@@ -185,7 +185,7 @@ export function createSystemAudio({ recordings, getHelper = verifiedHelper, laun
     const session = get(id);
     if (session.attached) throw new SystemAudioError('busy');
     session.attached = true; session.response = response;
-    response.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'private, no-store',
+    response.writeHead(200, { 'content-type': 'application/octet-stream', 'cache-control': 'private, no-store, no-transform',
       'x-content-type-options': 'nosniff', 'cross-origin-resource-policy': 'same-origin' });
     response.flushHeaders?.();
     response.once('close', () => {
