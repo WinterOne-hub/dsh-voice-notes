@@ -182,6 +182,9 @@ async function secureFile(path, kind, mode) {
   }
 }
 
+export const REPORT_KINDS = ['meeting', 'lecture', 'learning'];
+const RECORDING_SCENES = ['auto', 'meeting', 'lecture', 'self-study'];
+
 /** @param {string} directory absolute recordings directory */
 export function createRecordingStore(directory) {
   const root = resolve(directory);
@@ -286,7 +289,7 @@ export function createRecordingStore(directory) {
   }
 
   async function save({ audio, mimeType, text, translation, duration, language, providerId,
-    title, report, diagnostics, source, reportKind, systemPcm = false, live = false }) {
+    title, report, diagnostics, source, reportKind, recordingScene, systemPcm = false, live = false }) {
     await ensure();
     const mime = normalizeMime(mimeType);
     const id = `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -308,7 +311,8 @@ export function createRecordingStore(directory) {
       title: cleanTitle(title) || defaultTitle(cleanText),
       ...(source === 'import' || source === 'retranscription' || source === 'system' ? { source, customTitle: Boolean(cleanTitle(title)) } : {}),
     };
-    if (['meeting', 'learning'].includes(reportKind)) meta.reportKind = reportKind;
+    if (REPORT_KINDS.includes(reportKind)) meta.reportKind = reportKind;
+    if (RECORDING_SCENES.includes(recordingScene)) meta.recordingScene = recordingScene;
     if (source === 'system' && systemPcm === true) meta.systemPcm = true;
     if (diagnostics && typeof diagnostics === 'object') {
       meta.diagnostics = {
@@ -545,7 +549,7 @@ export function createRecordingStore(directory) {
           if (patch.meetingRevision === meta.meeting.revision) delete meta.meetingReportStale;
           else meta.meetingReportStale = true;
         }
-        if (['meeting', 'learning'].includes(patch.reportKind)) meta.reportKind = patch.reportKind;
+        if (REPORT_KINDS.includes(patch.reportKind)) meta.reportKind = patch.reportKind;
         for (const key of ['translation', 'editedText', 'report']) {
           if (typeof patch[key] === 'string') meta[key] = patch[key].slice(0, 200_000);
         }

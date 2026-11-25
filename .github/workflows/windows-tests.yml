@@ -41,5 +41,7 @@ jobs:
           path: |
             native/bin/win32-x64/system-audio.exe
             native/bin/win32-x64.json
+            native/bin/win32-x64/voice-captions.exe
+            native/bin/win32-x64-captions.json
           if-no-files-found: error
           retention-days: 7

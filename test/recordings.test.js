@@ -195,7 +195,7 @@ test('failed segment can be retried and concurrent derived updates preserve the 
 async function bootClient(t, call, preferences = {}, runtime = {}) {
   const rawSource = await readFile(new URL('../client.js', import.meta.url), 'utf8');
   const source = rawSource.replace(/^    return \{\r?\n      inject: \['slots',/m, (registration) =>
-    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, sendPartial, handleDictationShortcut, mountRecordingIndicator, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, MeetingInterpretation, translate };\n' + registration);
+    '    globalThis.voice = { store, engine, begin, finish, finalizeSegment, ingestSamples, sendPartial, handleDictationShortcut, mountRecordingIndicator, mountDesktopCaptions, segmentAtTime, importAudio, importedMime, openTranscriptDraft, readTranscriptSelection, CheckGauge, MeetingCheck, MeetingInterpretation, translate };\n' + registration);
   assert.ok(source !== rawSource, 'The test harness must expose the client factory helpers');
   const methods = { connect() {}, disconnect() {} };
   const stream = { getTracks: () => [] };
@@ -208,7 +208,7 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   }
   class OfflineAudioContext {
     async decodeAudioData() {
-      return {
+      return runtime.decodedAudio ?? {
         sampleRate: 16000, numberOfChannels: 2, length: 480000, duration: 30,
         getChannelData: () => new Float32Array(480000),
       };
@@ -233,9 +233,9 @@ async function bootClient(t, call, preferences = {}, runtime = {}) {
   }
   const body = new Element();
   const sandbox = {
-    AbortController, AbortSignal, Blob, DataView, Range: { START_TO_START: 0, END_TO_END: 2 }, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa,
+    AbortController, AbortSignal, Blob, DataView, Range: { START_TO_START: 0, END_TO_END: 2 }, MediaRecorder, OfflineAudioContext, URLSearchParams, btoa, crypto,
     setInterval: runtime.setInterval ?? setInterval, clearInterval: runtime.clearInterval ?? clearInterval,
-    setTimeout, clearTimeout, queueMicrotask, performance: runtime.performance ?? performance,
+    setTimeout, clearTimeout, queueMicrotask, Date: runtime.Date ?? Date, performance: runtime.performance ?? performance,
     document: { body, createElement: () => new Element() },
     navigator: { mediaDevices: { getUserMedia: async () => { if (runtime.forbidMicrophone) throw new Error('Microphone must remain off'); return runtime.microphone ?? stream; } } },
     window: {
@@ -272,6 +272,38 @@ function waitFor(store, predicate) {
     });
   });
 }
+
+test('desktop captions follow the recording preference and close when recording ends', { timeout: 3000 }, async (t) => {
+  const { call } = await fixture(t);
+  const opened = Promise.withResolvers();
+  const updated = Promise.withResolvers();
+  const closed = Promise.withResolvers();
+  const { store, mountDesktopCaptions } = await bootClient(t, call, {}, {
+    fetch(path, options) {
+      assert.equal(path, API + '/desktop-captions');
+      const input = JSON.parse(options.body);
+      if (options.method === 'POST') {
+        opened.resolve(input);
+        return { ok: true, body: new ReadableStream({
+          start(stream) { options.signal.addEventListener('abort', () => { stream.close(); closed.resolve(); }); },
+        }) };
+      }
+      assert.equal(options.method, 'PATCH');
+      updated.resolve(input);
+      return { ok: true, json: async () => ({ ok: true }) };
+    },
+  });
+  t.after(mountDesktopCaptions());
+  assert.equal(store.get().captionMode, 'off');
+  store.set({ phase: 'recording', captionMode: 'translation', partialText: 'Original' });
+  const first = await opened.promise;
+  assert.equal(first.text, 'Original');
+  store.set({ translate: true, translationText: '译文' });
+  assert.deepEqual(await updated.promise, { id: first.id, text: '译文' });
+  store.set({ phase: 'finishing' });
+  await closed.promise;
+  assert.equal(store.get().captionError, '');
+});
 
 test('quiet audio keeps recording while missing frames stop and preserve the archive', { timeout: 3000 }, async (t) => {
   const { call, dataRoot } = await fixture(t);
@@ -637,6 +669,51 @@ test('file import persists audio and timestamps and re-transcription keeps the e
   assert.deepEqual(state.speechCalls, ['en', 'en', 'zh', 'zh']);
   assert.equal(state.modelCalls, 0);
   assert.equal(store.get().importError, '');
+});
+
+test('lecture uses longer pauses and keeps the snapshot and report template from the start of recording', async (t) => {
+  const { call } = await fixture(t);
+  let now = 10_000, tick;
+  const { store, engine, begin, ingestSamples, finish } = await bootClient(t, call, { recordingScene: 'lecture' }, {
+    Date: class extends Date { static now() { return now; } },
+    setInterval(fn) { tick = fn; return 1; },
+    clearInterval() { tick = undefined; },
+  });
+  await begin(null, undefined, false, 'studio');
+  const id = engine.run.id;
+  assert.equal(engine.run.meetingSpeakers, undefined);
+  const input = new Float32Array(8000).fill(0.1);
+  ingestSamples(input, engine.generation);
+  store.set({ recordingScene: 'meeting' });
+  now += 1500;
+  tick();
+  assert.equal(engine.segment.id, 0);
+  now += 750;
+  tick();
+  assert.equal(engine.segment.id, 1);
+  await finish('stop');
+  const { data } = await call(`${API}/recordings/${id}`);
+  assert.equal(data.recording.recordingScene, 'lecture');
+  assert.equal(data.recording.reportKind, 'lecture');
+});
+
+test('self-study skips digitally silent blocks while preserving audio and recording timestamps', async (t) => {
+  const { call, state } = await fixture(t);
+  const samples = new Float32Array(30 * PCM_RATE);
+  samples.fill(0.1, 28 * PCM_RATE);
+  const { importAudio } = await bootClient(t, call, {}, {
+    decodedAudio: { duration: 30, sampleRate: PCM_RATE, length: samples.length,
+      numberOfChannels: 1, getChannelData: () => samples },
+  });
+  const audio = new Blob(['study fixture'], { type: 'audio/wav' });
+  const id = await importAudio(() => audio, { mimeType: audio.type, language: 'en',
+    source: 'import', recordingScene: 'self-study', reportKind: 'learning' });
+  const { data: { recording } } = await call(`${API}/recordings/${id}`);
+  assert.equal(recording.recordingScene, 'self-study');
+  assert.equal(recording.duration, 30);
+  assert.deepEqual(recording.segments.map(({ start, end }) => [start, end]), [[28, 30]]);
+  assert.equal((await call(`${API}/recordings/${id}/audio`)).data.toString(), 'study fixture');
+  assert.deepEqual(state.speechCalls, ['en']);
 });
 
 test('reports honor the selected output language without a standalone model question route', async (t) => {
@@ -1171,6 +1248,9 @@ test('learning notes honor language and require selected-model confirmation for 
     assert.match(state.lastModelInput, /learning notes in English/);
     assert.match(state.lastModelInput, /Review Questions/);
     assert.match(state.lastModelInput, /Only use supplied facts/);
+    assert.equal((await call(`${API}/report`, 'POST', { kind: 'lecture', text: '[00:28] Sample', language: 'en', model, mode })).status, 200);
+    assert.match(state.lastModelInput, /chronological lecture notes in English/);
+    assert.match(state.lastModelInput, /\[00:28\] Sample/);
   }
   assert.equal((await call(`${API}/system-audio`, 'POST', { confirmed: false, language: 'en' })).status, 400);
   assert.equal((await call(`${API}/system-audio/not-a-session`, 'DELETE')).status, 404);
@@ -1235,6 +1315,20 @@ test('microphone initialization failure releases the acquired track', async (t) 
   await begin(null, undefined, false, 'studio');
   assert.equal(store.get().phase, 'error');
   assert.equal(stopped, 1);
+});
+
+test('a custom recording title survives transcription updates and is searchable', async (t) => {
+  const { call } = await fixture(t);
+  const { data: { recording } } = await call(API + '/recordings/live', 'POST', { mimeType: 'audio/webm' });
+  const path = API + '/recordings/' + recording.id;
+  const renamed = await call(path, 'PATCH', { title: '  Lecture title  ' });
+  assert.equal(renamed.data.recording.customTitle, true);
+  assert.equal((await call(path + '/segments/0?start=0&end=1', 'PUT', wave())).status, 200);
+  assert.equal((await call(path + '/segments/0/retry?live=1', 'POST')).data.segment.state, 'ready');
+  const results = await call(API + '/recordings?q=Lecture%20title');
+  assert.equal(results.data.recordings.length, 1);
+  assert.equal(results.data.recordings[0].title, 'Lecture title');
+  assert.equal(results.data.recordings[0].customTitle, true);
 });
 
 test('reports become stale after correction and stale work cannot overwrite them', async (t) => {
